@@ -2,223 +2,324 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>MAIN — Interactive Audience Game</title>
+<title>Interactive Audience Game</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0a0a0f;
-    --surface: #15151c;
-    --surface-2: #1f1f28;
-    --line: #2a2a36;
+    --bg: #000;
+    --surface: rgba(21,21,28,0.85);
+    --surface-2: rgba(31,31,40,0.9);
+    --line: rgba(255,255,255,0.12);
     --text: #f5f5f7;
-    --muted: #6a6a7e;
+    --muted: #9999aa;
     --accent: #ffd60a;
     --danger: #ff3d71;
     --success: #00d68f;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body {
+  html, body {
+    margin: 0; padding: 0; height: 100%;
     background: var(--bg); color: var(--text);
     font-family: 'Bricolage Grotesque', sans-serif;
-    min-height: 100vh; overflow-x: hidden;
+    overflow: hidden;
   }
-  body::before {
-    content: ''; position: fixed; inset: 0;
-    background: radial-gradient(ellipse at top right, rgba(255,214,10,0.06), transparent 50%),
-                radial-gradient(ellipse at bottom left, rgba(255,61,113,0.04), transparent 50%);
-    pointer-events: none; z-index: 0;
-  }
-  .app {
-    display: grid; grid-template-columns: 1fr 360px; gap: 24px;
-    padding: 24px; min-height: 100vh; position: relative; z-index: 1;
-  }
+
+  /* ── 영상 스테이지 (풀스크린) ── */
   .stage {
-    background: var(--surface); border: 1px solid var(--line);
-    border-radius: 16px; padding: 40px;
-    display: flex; flex-direction: column; gap: 24px;
-    min-height: calc(100vh - 48px);
+    position: fixed; inset: 0;
+    background: #000;
   }
-  .stage-header {
-    display: flex; justify-content: space-between; align-items: baseline;
-    border-bottom: 1px solid var(--line); padding-bottom: 16px;
+  .vid-layer {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.4s ease;
   }
-  .brand {
-    font-weight: 800; font-size: 14px; letter-spacing: 0.15em;
-    text-transform: uppercase; color: var(--accent);
+  .vid-layer.active { opacity: 1; }
+
+  /* ── 오버레이 ── */
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 60px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
   }
-  .brand::before { content: '◉ '; color: var(--danger); animation: pulse 2s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-  .scene-meta {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    color: var(--muted); letter-spacing: 0.05em;
+  .overlay.show { opacity: 1; pointer-events: auto; }
+
+  .overlay-backdrop {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.85) 100%);
+    z-index: 0;
   }
-  .scene-meta b { color: var(--text); }
-  .scene-display {
-    flex: 1; display: flex; flex-direction: column;
-    justify-content: center; align-items: center; text-align: center;
-    gap: 32px; padding: 40px 20px;
+
+  .overlay-content {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column;
+    align-items: center; text-align: center;
+    gap: 32px; max-width: 1200px; width: 100%;
   }
-  .prompt {
-    font-size: clamp(32px, 5vw, 56px); font-weight: 600;
-    line-height: 1.2; max-width: 900px; letter-spacing: -0.02em;
+
+  .overlay-prompt {
+    font-size: clamp(36px, 5vw, 64px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    text-shadow: 0 4px 24px rgba(0,0,0,0.8);
   }
-  .timer {
-    font-family: 'JetBrains Mono', monospace; font-size: 72px;
-    font-weight: 700; color: var(--accent); letter-spacing: -0.05em;
+
+  .overlay-timer {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 64px; font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.05em;
+    text-shadow: 0 0 24px rgba(255,214,10,0.5);
     transition: color 0.3s;
   }
-  .timer.warning { color: var(--danger); animation: shake 0.3s ease-in-out infinite; }
+  .overlay-timer.warning {
+    color: var(--danger);
+    animation: shake 0.3s ease-in-out infinite;
+  }
   @keyframes shake {
     0%,100% { transform: translateX(0); }
-    25% { transform: translateX(-2px); } 75% { transform: translateX(2px); }
+    25% { transform: translateX(-3px); }
+    75% { transform: translateX(3px); }
   }
-  .status-line {
-    font-family: 'JetBrains Mono', monospace; font-size: 13px;
-    color: var(--muted); text-transform: uppercase; letter-spacing: 0.2em;
-  }
-  .results { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 14px; }
-  .bar-row {
-    display: grid; grid-template-columns: 180px 1fr 80px;
-    gap: 16px; align-items: center;
-  }
-  .bar-label { font-size: 20px; font-weight: 500; text-align: left; }
-  .bar-track { background: var(--surface-2); border-radius: 6px; height: 36px; overflow: hidden; }
-  .bar-fill {
-    height: 100%; background: linear-gradient(90deg, var(--accent), #ff8c00);
-    transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); width: 0%;
-  }
-  .bar-row.winner .bar-fill { background: linear-gradient(90deg, var(--success), #00d68f); }
-  .bar-count { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; text-align: right; }
-  .ox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; width: 100%; max-width: 700px; }
-  .ox-card {
-    background: var(--surface-2); border: 2px solid var(--line);
-    border-radius: 12px; padding: 40px 20px; text-align: center;
-    transition: all 0.4s;
-  }
-  .ox-card.O { border-color: var(--success); }
-  .ox-card.X { border-color: var(--danger); }
-  .ox-symbol { font-size: 120px; font-weight: 800; line-height: 1; }
-  .ox-card.O .ox-symbol { color: var(--success); }
-  .ox-card.X .ox-symbol { color: var(--danger); }
-  .ox-count { font-family: 'JetBrains Mono', monospace; font-size: 48px; font-weight: 700; margin-top: 16px; }
-  .qte-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; width: 100%; max-width: 800px; }
-  .stat-card {
-    background: var(--surface-2); border: 1px solid var(--line);
-    border-radius: 12px; padding: 28px; text-align: center;
-  }
-  .stat-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.15em; }
-  .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 56px; font-weight: 700; color: var(--accent); margin-top: 8px; }
-  .leaderboard { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 8px; }
-  .lb-row {
-    display: grid; grid-template-columns: 40px 1fr 80px;
-    align-items: center; padding: 12px 20px; background: var(--surface-2);
-    border-radius: 8px; border-left: 3px solid var(--line); transition: all 0.3s;
-  }
-  .lb-row.top1 { border-left-color: var(--accent); background: rgba(255,214,10,0.08); }
-  .lb-row.top2 { border-left-color: #c9c9d8; }
-  .lb-row.top3 { border-left-color: #cd7f32; }
-  .lb-rank { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--muted); }
-  .lb-name { font-weight: 500; font-size: 18px; }
-  .lb-count { font-family: 'JetBrains Mono', monospace; font-weight: 700; text-align: right; font-size: 20px; color: var(--accent); }
-  .word-cloud { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; max-width: 900px; }
-  .word-bubble {
-    background: var(--surface-2); border: 1px solid var(--line);
-    border-radius: 999px; padding: 10px 20px; font-size: 18px;
-    animation: drop 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  @keyframes drop { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-  .idle-screen { text-align: center; opacity: 0.5; }
-  .idle-screen h2 { font-size: 32px; margin: 0 0 8px; }
-  .idle-screen p { color: var(--muted); margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-  .panel {
-    background: var(--surface); border: 1px solid var(--line);
-    border-radius: 16px; padding: 24px;
+
+  /* 결과 막대 */
+  .results-grid {
+    width: 100%; max-width: 900px;
     display: flex; flex-direction: column; gap: 16px;
-    max-height: calc(100vh - 48px); overflow-y: auto;
   }
-  .panel-title {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    text-transform: uppercase; letter-spacing: 0.2em;
-    color: var(--muted); margin: 0;
+  .res-row {
+    display: grid; grid-template-columns: 240px 1fr 100px;
+    gap: 20px; align-items: center;
   }
-  .scene-btn {
-    background: var(--surface-2); border: 1px solid var(--line);
-    color: var(--text); padding: 14px 16px; border-radius: 10px;
-    cursor: pointer; text-align: left; font-family: inherit;
-    font-size: 14px; transition: all 0.2s;
+  .res-label { font-size: 24px; font-weight: 500; text-align: left;
+               text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+  .res-track {
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(8px);
+    border-radius: 8px; height: 44px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.15);
   }
-  .scene-btn:hover { border-color: var(--accent); background: rgba(255,214,10,0.05); }
-  .scene-btn .tag {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px;
-    color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em;
-    display: block; margin-bottom: 4px;
+  .res-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent), #ff8c00);
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .action-btn {
-    padding: 12px; border: none; border-radius: 8px;
-    font-family: inherit; font-size: 14px; font-weight: 600;
-    cursor: pointer; transition: opacity 0.2s;
+  .res-row.winner .res-fill {
+    background: linear-gradient(90deg, var(--success), #00d68f);
+    box-shadow: 0 0 24px rgba(0,214,143,0.4);
   }
-  .action-btn:hover { opacity: 0.85; }
-  .action-btn.reveal { background: var(--accent); color: #000; }
-  .action-btn.idle { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
-  .action-btn.reset { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
-  .connection {
-    display: flex; align-items: center; gap: 8px;
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted);
+  .res-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px; font-weight: 700;
+    text-align: right;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
   }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .dot.live { background: var(--success); box-shadow: 0 0 8px var(--success); }
-  .participants { font-size: 11px; color: var(--muted); line-height: 1.8; }
-  .participants .chip {
-    display: inline-block; padding: 2px 8px; margin: 2px;
-    background: var(--surface-2); border-radius: 4px;
-    color: var(--text); font-family: 'JetBrains Mono', monospace;
+
+  .status-pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; color: var(--text);
+    padding: 8px 16px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.15);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
   }
+
+  /* ── 결말 화면 ── */
+  .ending-screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    text-align: center; padding: 60px;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.7), #000 80%);
+    opacity: 0;
+    transition: opacity 1s ease;
+    pointer-events: none;
+  }
+  .ending-screen.show { opacity: 1; pointer-events: auto; }
+
+  .ending-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  .ending-title {
+    font-size: clamp(56px, 8vw, 120px);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 0.95;
+    margin: 0;
+  }
+  .ending-subtitle {
+    font-size: clamp(20px, 3vw, 32px);
+    font-weight: 400;
+    color: var(--muted);
+    margin: 16px 0 32px;
+  }
+  .ending-description {
+    font-size: 18px; line-height: 1.6;
+    max-width: 600px;
+    color: var(--text);
+    opacity: 0.85;
+    margin: 0 0 48px;
+  }
+
+  /* ── 시작 화면 ── */
+  .start-screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    text-align: center; padding: 60px;
+    background: radial-gradient(ellipse at center, #15151c, #000 80%);
+    z-index: 10;
+    transition: opacity 0.8s ease;
+  }
+  .start-screen.hide { opacity: 0; pointer-events: none; }
+  .start-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .start-title {
+    font-size: clamp(48px, 8vw, 112px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 0.95;
+    margin: 0 0 24px;
+  }
+  .start-info {
+    color: var(--muted);
+    font-size: 16px;
+    margin-bottom: 48px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .start-info b { color: var(--text); }
+
+  .big-btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 20px 64px;
+    font-family: inherit;
+    font-size: 20px;
+    font-weight: 700;
+    border-radius: 12px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 0 40px rgba(255,214,10,0.3);
+  }
+  .big-btn:hover { transform: translateY(-2px); box-shadow: 0 0 60px rgba(255,214,10,0.5); }
+  .big-btn:active { transform: scale(0.98); }
+  .big-btn.ghost {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+    box-shadow: none;
+  }
+  .big-btn.ghost:hover { background: rgba(255,255,255,0.05); }
+
+  /* ── HUD (상단 미니 컨트롤) ── */
+  .hud {
+    position: fixed; top: 16px; right: 16px;
+    display: flex; gap: 12px; align-items: center;
+    z-index: 100;
+  }
+  .hud-pill {
+    padding: 6px 12px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  .hud-pill .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .hud-pill .dot.live { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .hud-btn {
+    padding: 6px 12px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--text);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .hud-btn:hover { background: rgba(255,255,255,0.1); }
 </style>
 </head>
 <body>
-<div class="app">
-  <main class="stage">
-    <header class="stage-header">
-      <div class="brand">Audience Live · S01</div>
-      <div class="scene-meta">
-        SCENE <b id="metaScene">—</b> · TYPE <b id="metaType">—</b> · PHASE <b id="metaPhase">—</b>
-      </div>
-    </header>
-    <div class="scene-display" id="display">
-      <div class="idle-screen">
-        <h2>대기 중</h2>
-        <p>우측 패널에서 씬을 선택하세요</p>
-      </div>
-    </div>
-  </main>
 
-  <aside class="panel">
-    <div class="connection">
-      <span class="dot" id="connDot"></span>
-      <span id="connText">연결 중...</span>
+<!-- 스테이지: 영상 2개 (이중 버퍼) + 오버레이 -->
+<div class="stage">
+  <video id="vA" class="vid-layer" playsinline preload="auto"></video>
+  <video id="vB" class="vid-layer" playsinline preload="auto"></video>
+
+  <div class="overlay" id="overlay">
+    <div class="overlay-backdrop"></div>
+    <div class="overlay-content" id="overlayContent"></div>
+  </div>
+
+  <div class="ending-screen" id="endingScreen"></div>
+
+  <div class="start-screen" id="startScreen">
+    <div class="start-eyebrow">◉ Audience Live · 인터랙티브 게임</div>
+    <h1 class="start-title">시작하기</h1>
+    <div class="start-info">
+      청중 <b id="userCount">0</b>명 접속 중 · <span id="connText">연결 중...</span>
     </div>
 
-    <h3 class="panel-title">씬 라이브러리</h3>
-    <button class="scene-btn" onclick="fireScene('choice2')"><span class="tag">2지선다</span>스토리 분기</button>
-    <button class="scene-btn" onclick="fireScene('choice4')"><span class="tag">4지선다</span>전투 행동 선택</button>
-    <button class="scene-btn" onclick="fireScene('ox')"><span class="tag">OX 투표</span>찬반 결정</button>
-    <button class="scene-btn" onclick="fireScene('qte')"><span class="tag">QTE 단일 탭</span>회피 반응</button>
-    <button class="scene-btn" onclick="fireScene('qte_burst')"><span class="tag">QTE 연타</span>5초 파워 충전</button>
-    <button class="scene-btn" onclick="fireScene('text')"><span class="tag">자유 텍스트</span>한 단어 응답</button>
+    <div id="videoLoader" style="margin-bottom:24px; display:flex; flex-direction:column; gap:10px; align-items:center">
+      <button class="big-btn ghost" id="loadVideosBtn">📁 영상 폴더 선택 (로컬)</button>
+      <div id="videoStatus" style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted)">
+        업로드 없이 노트북의 영상 폴더를 직접 선택
+      </div>
+      <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
+    </div>
 
-    <h3 class="panel-title">제어</h3>
-    <button class="action-btn reveal" onclick="reveal()">결과 공개 (Reveal)</button>
-    <button class="action-btn idle" onclick="goIdle()">대기 화면으로</button>
-    <button class="action-btn reset" onclick="resetAll()">입력 데이터 초기화</button>
-
-    <h3 class="panel-title">참가자 (<span id="userCount">0</span>)</h3>
-    <div class="participants" id="participantList">—</div>
-  </aside>
+    <button class="big-btn" id="startBtn">▶ 게임 시작</button>
+  </div>
 </div>
+
+<!-- HUD -->
+<div class="hud">
+  <div class="hud-pill"><span class="dot" id="connDot"></span><span id="hudConn">CONNECTING</span></div>
+  <div class="hud-pill">👤 <span id="hudUsers">0</span></div>
+  <button class="hud-btn" id="restartBtn" style="display:none">RESTART</button>
+</div>
+
+<!-- 씬 정의 (편집 가능) -->
+<script src="scenes.js"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
@@ -227,254 +328,361 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
 // ════════════════════════════════════════════════════════════
-// Firebase 설정 — 본인 firebaseConfig 객체로 통째로 교체
+// Firebase 설정 — 본인 firebaseConfig 객체로 교체
 // ════════════════════════════════════════════════════════════
 const firebaseConfig = {
-  apiKey: "AIzaSyCl0_QKjC8LxEYNMQLNh1EJWBZom2CFXro",
-  authDomain: "gen-lang-client-0314320228.firebaseapp.com",
-  databaseURL: "https://gen-lang-client-0314320228-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "gen-lang-client-0314320228",
-  storageBucket: "gen-lang-client-0314320228.firebasestorage.app",
-  messagingSenderId: "1077038002206",
-  appId: "1:1077038002206:web:217cd7401a119e9aee7e0f"
+  apiKey: "여기에_API_KEY",
+  authDomain: "여기에_AUTH_DOMAIN",
+  databaseURL: "여기에_DATABASE_URL",
+  projectId: "여기에_PROJECT_ID",
+  storageBucket: "여기에_STORAGE_BUCKET",
+  messagingSenderId: "여기에_SENDER_ID",
+  appId: "여기에_APP_ID"
 };
 
-// ════════════════════════════════════════════════════════════
-// 씬 정의
-// ════════════════════════════════════════════════════════════
-const SCENE_LIBRARY = {
-  choice2: {
-    type: 'choice', duration: 12000,
-    payload: {
-      prompt: '어두운 동굴에 도착했다. 어떻게 할까?',
-      options: ['🔥 횃불 켜고 들어간다', '🌿 우회로를 찾는다']
-    }
-  },
-  choice4: {
-    type: 'choice', duration: 15000,
-    payload: {
-      prompt: '괴물이 나타났다! 어떤 행동?',
-      options: ['⚔️ 정면 공격', '🛡️ 회피', '💬 협상 시도', '🏃 도망친다']
-    }
-  },
-  ox: {
-    type: 'ox', duration: 10000,
-    payload: { prompt: '이 캐릭터를 살려야 한다', options: ['O', 'X'] }
-  },
-  qte: { type: 'qte', duration: 3000, payload: { prompt: '⚡ 지금 회피!' } },
-  qte_burst: { type: 'qte_burst', duration: 5000, payload: { prompt: '💥 있는 힘껏 두드려라!' } },
-  text: { type: 'text', duration: 15000, payload: { prompt: '오늘 기분을 한 단어로?' } }
-};
-
-// ════════════════════════════════════════════════════════════
-// Firebase 초기화
-// ════════════════════════════════════════════════════════════
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const stateRef = ref(db, 'gameState');
 const usersRef = ref(db, 'users');
-const inputsRootRef = ref(db, 'inputs');
 
-let currentState = null;
-let currentInputs = {};
-let currentUsers = {};
-let serverOffset = 0;
-let timerId = null;
-let inputsUnsubscribe = null;
+// 씬 정의 (scenes.js 에서 로드)
+const SCENES = window.SCENES;
+const START_SCENE = window.START_SCENE || 'start';
 
 // ════════════════════════════════════════════════════════════
-// 메타 정보 구독
+// 로컬 영상 매핑 (File API)
+// 발표자가 자기 노트북 폴더를 선택하면 그 안의 영상들을 blob URL 로 매핑.
+// scenes.js 의 'videos/example.mp4' 같은 경로는 파일명으로 매칭됨.
 // ════════════════════════════════════════════════════════════
-onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
-  serverOffset = snap.val() || 0;
-});
+const localVideos = {};   // { 'example.mp4': blob_url, ... }
 
-onValue(ref(db, '.info/connected'), (snap) => {
-  const ok = !!snap.val();
-  document.getElementById('connDot').classList.toggle('live', ok);
-  document.getElementById('connText').textContent = ok ? 'LIVE · realtime' : '연결 끊김';
-});
+document.getElementById('loadVideosBtn').onclick = () => {
+  document.getElementById('folderInput').click();
+};
 
-// ════════════════════════════════════════════════════════════
-// 게임 상태 구독
-// ════════════════════════════════════════════════════════════
-onValue(stateRef, (snap) => {
-  const state = snap.val() || {
-    scene_id: '', type: 'idle', started_at: 0,
-    duration: 0, payload: null, phase: 'idle'
-  };
-
-  // 씬이 바뀌면 inputs 구독 갈아끼우기
-  if (state.scene_id !== currentState?.scene_id) {
-    currentInputs = {};
-    if (inputsUnsubscribe) inputsUnsubscribe();
-    inputsUnsubscribe = null;
-    if (state.scene_id) {
-      const sceneInputsRef = ref(db, `inputs/${state.scene_id}`);
-      inputsUnsubscribe = onValue(sceneInputsRef, (s) => {
-        currentInputs = s.val() || {};
-        render(currentState, currentInputs);
-      });
+document.getElementById('folderInput').onchange = (e) => {
+  const files = Array.from(e.target.files || []);
+  let loadedCount = 0;
+  for (const file of files) {
+    // 영상 파일만 (확장자 또는 MIME 검사)
+    if (file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|ogv)$/i.test(file.name)) {
+      // 같은 이름이 여러 폴더에 있으면 마지막 것이 이김 (보통 문제 없음)
+      localVideos[file.name] = URL.createObjectURL(file);
+      loadedCount++;
     }
   }
+  const status = document.getElementById('videoStatus');
+  if (loadedCount > 0) {
+    const fileList = Object.keys(localVideos).slice(0, 5).join(', ');
+    const more = Object.keys(localVideos).length > 5 ? ` 외 ${Object.keys(localVideos).length - 5}개` : '';
+    status.innerHTML = `✓ <span style="color:var(--success)">${loadedCount}개 영상 로드됨</span> · ${fileList}${more}`;
+  } else {
+    status.innerHTML = `<span style="color:var(--danger)">⚠ 영상 파일이 없어요. 다시 선택해주세요.</span>`;
+  }
+};
 
-  currentState = state;
-  render(state, currentInputs);
-});
-
-// 참가자 구독
-onValue(usersRef, (snap) => {
-  currentUsers = snap.val() || {};
-  const arr = Object.entries(currentUsers)
-    .map(([id, u]) => ({ id, ...u }))
-    .sort((a, b) => (b.joined_at || 0) - (a.joined_at || 0));
-  document.getElementById('userCount').textContent = arr.length;
-  document.getElementById('participantList').innerHTML = arr.length
-    ? arr.map(u => `<span class="chip">${escapeHtml(u.nickname)}</span>`).join('')
-    : '<span style="color:var(--muted)">아직 참가자가 없어요</span>';
-});
+function resolveVideoSrc(src) {
+  if (!src) return src;
+  // 외부 URL 이면 그대로 사용
+  if (/^(https?:|blob:)/.test(src)) return src;
+  // 로컬 매핑에 파일명이 있으면 blob URL 로 치환
+  const filename = src.split('/').pop();
+  if (localVideos[filename]) return localVideos[filename];
+  // 폴백: 상대경로 그대로 (영상이 같은 서버에 있는 경우)
+  return src;
+}
 
 // ════════════════════════════════════════════════════════════
-// 씬 제어 (window 에 노출 — onclick 인라인 핸들러용)
+// 비디오 플레이어 — 이중 버퍼
 // ════════════════════════════════════════════════════════════
-window.fireScene = function(key) {
-  const def = SCENE_LIBRARY[key];
-  if (!def) return;
-  set(stateRef, {
-    scene_id: `s_${key}_${Date.now()}`,
-    type: def.type,
-    started_at: Date.now(),
-    duration: def.duration,
-    payload: def.payload,
-    phase: 'collecting',
-    updated_at: Date.now()
+const vA = document.getElementById('vA');
+const vB = document.getElementById('vB');
+let activeVideo = vA, standbyVideo = vB;
+
+function swapVideos() {
+  activeVideo.classList.remove('active');
+  standbyVideo.classList.add('active');
+  [activeVideo, standbyVideo] = [standbyVideo, activeVideo];
+}
+
+// 영상을 standby 슬롯에 로드 후 활성화 (예열 효과)
+async function loadIntoStandby(src) {
+  const resolved = resolveVideoSrc(src);
+  standbyVideo.src = resolved;
+  standbyVideo.load();
+  await new Promise((resolve, reject) => {
+    const onReady = () => { cleanup(); resolve(); };
+    const onError = (e) => { cleanup(); reject(e); };
+    const cleanup = () => {
+      standbyVideo.removeEventListener('canplaythrough', onReady);
+      standbyVideo.removeEventListener('error', onError);
+    };
+    standbyVideo.addEventListener('canplaythrough', onReady, { once: true });
+    standbyVideo.addEventListener('error', onError, { once: true });
+    // 안전장치: 5초 이내 canplaythrough 안 와도 진행
+    setTimeout(resolve, 5000);
   });
-};
+}
 
-window.reveal = function() {
-  if (!currentState?.scene_id) return;
-  update(stateRef, { phase: 'reveal', updated_at: Date.now() });
-};
+// 영상을 재생하며 특정 시점(freezeAt)에서 슬로우 + 정지
+function playUntilFreeze(video, freezeAt, slowDuration) {
+  return new Promise(async (resolve) => {
+    video.playbackRate = 1.0;
+    video.muted = false;
+    try { await video.play(); } catch(e) { video.muted = true; await video.play(); }
 
-window.goIdle = function() {
-  set(stateRef, {
-    scene_id: '', type: 'idle', started_at: 0,
-    duration: 0, payload: null, phase: 'idle',
-    updated_at: Date.now()
+    const monitor = () => {
+      if (video.paused || video.ended) { resolve(); return; }
+      const remaining = freezeAt - video.currentTime;
+
+      if (remaining <= slowDuration) {
+        // 슬로우 모션 — 선형 감속
+        const progress = Math.max(0, 1 - (remaining / slowDuration));
+        video.playbackRate = Math.max(0.08, 1 - progress * 0.92);
+      }
+
+      if (remaining <= 0.05) {
+        video.pause();
+        video.currentTime = freezeAt;
+        video.playbackRate = 1.0;
+        resolve();
+        return;
+      }
+      requestAnimationFrame(monitor);
+    };
+    requestAnimationFrame(monitor);
   });
-};
+}
 
-window.resetAll = function() {
-  if (!confirm('모든 입력 데이터 삭제할까요?\n(참가자 목록은 유지됨)')) return;
-  remove(inputsRootRef);
-};
+// 영상 끝까지 그냥 재생
+function playToEnd(video) {
+  return new Promise(async (resolve) => {
+    video.playbackRate = 1.0;
+    try { await video.play(); } catch(e) { video.muted = true; await video.play(); }
+    video.addEventListener('ended', () => resolve(), { once: true });
+  });
+}
 
 // ════════════════════════════════════════════════════════════
-// 렌더링
+// 오버레이 UI (메인 스크린에서의 선택지 표시)
 // ════════════════════════════════════════════════════════════
-function render(state, inputs) {
-  if (!state) return;
-  document.getElementById('metaScene').textContent = state.scene_id || '—';
-  document.getElementById('metaType').textContent = state.type || '—';
-  document.getElementById('metaPhase').textContent = state.phase || '—';
+const overlay = document.getElementById('overlay');
+const overlayContent = document.getElementById('overlayContent');
+let currentInputs = {};
+let overlayTimerId = null;
+let currentOverlayState = null;
 
-  const display = document.getElementById('display');
+function showOverlay(scene_id, overlayDef) {
+  currentOverlayState = { scene_id, overlay: overlayDef, started_at: Date.now() };
+  renderOverlay(overlayDef.options || [], {}, overlayDef);
+  overlay.classList.add('show');
+  startOverlayTimer(overlayDef.duration || 10000);
+}
 
-  if (!state.scene_id || state.phase === 'idle' || state.type === 'idle') {
-    display.innerHTML = `<div class="idle-screen">
-      <h2>대기 중</h2><p>우측 패널에서 씬을 선택하세요</p>
+function hideOverlay() {
+  overlay.classList.remove('show');
+  currentOverlayState = null;
+  stopOverlayTimer();
+}
+
+function renderOverlay(options, tally, overlayDef, showWinner = false) {
+  const max = Math.max(1, ...Object.values(tally), 1);
+  const winnerKey = showWinner
+    ? Object.entries(tally).sort((a,b)=>b[1]-a[1])[0]?.[0] : null;
+
+  const barsHtml = options.map(opt => {
+    const count = tally[opt] || 0;
+    const pct = (count / max) * 100;
+    const isWinner = opt === winnerKey && count > 0;
+    return `<div class="res-row ${isWinner ? 'winner' : ''}">
+      <div class="res-label">${escapeHtml(opt)}</div>
+      <div class="res-track"><div class="res-fill" style="width:${pct}%"></div></div>
+      <div class="res-count">${count}</div>
     </div>`;
-    stopTimer();
+  }).join('');
+
+  const totalParticipants = Object.keys(currentInputs).length;
+  const statusText = showWinner
+    ? `결과 공개 · ${totalParticipants}명 참여`
+    : `투표 진행 중 · ${totalParticipants}명 참여`;
+
+  overlayContent.innerHTML = `
+    <div class="status-pill">${statusText}</div>
+    <div class="overlay-prompt">${escapeHtml(overlayDef.prompt || '')}</div>
+    ${!showWinner ? `<div class="overlay-timer" id="overlayTimer">--s</div>` : ''}
+    <div class="results-grid">${barsHtml}</div>
+  `;
+}
+
+function startOverlayTimer(durationMs) {
+  stopOverlayTimer();
+  const startedAt = Date.now();
+  const tick = () => {
+    if (!currentOverlayState) return;
+    const remaining = Math.max(0, durationMs - (Date.now() - startedAt));
+    const el = document.getElementById('overlayTimer');
+    if (el) {
+      el.textContent = (remaining/1000).toFixed(1) + 's';
+      if (remaining < 3000) el.classList.add('warning');
+      else el.classList.remove('warning');
+    }
+    if (remaining > 0) overlayTimerId = requestAnimationFrame(tick);
+  };
+  overlayTimerId = requestAnimationFrame(tick);
+}
+function stopOverlayTimer() {
+  if (overlayTimerId) { cancelAnimationFrame(overlayTimerId); overlayTimerId = null; }
+}
+
+// ════════════════════════════════════════════════════════════
+// 결말 화면
+// ════════════════════════════════════════════════════════════
+const endingScreen = document.getElementById('endingScreen');
+function showEnding(scene) {
+  endingScreen.innerHTML = `
+    <div class="ending-eyebrow">― 결말 ―</div>
+    <h1 class="ending-title" style="color:${scene.color || 'var(--accent)'}">${escapeHtml(scene.title || '결말')}</h1>
+    <div class="ending-subtitle">${escapeHtml(scene.subtitle || '')}</div>
+    <p class="ending-description">${escapeHtml(scene.description || '')}</p>
+    <button class="big-btn ghost" onclick="window.restartGame()">다시 시작</button>
+  `;
+  endingScreen.classList.add('show');
+  document.getElementById('restartBtn').style.display = 'block';
+}
+function hideEnding() {
+  endingScreen.classList.remove('show');
+}
+
+// ════════════════════════════════════════════════════════════
+// 게임 엔진
+// ════════════════════════════════════════════════════════════
+let inputsUnsubscribe = null;
+
+async function playScene(sceneId) {
+  const scene = SCENES[sceneId];
+  if (!scene) {
+    console.error('Unknown scene:', sceneId);
     return;
   }
+  console.log('▶ Scene:', sceneId, scene);
 
-  const payload = state.payload || {};
-  const showResults = state.phase === 'reveal';
-  const inputCount = Object.keys(inputs).length;
-  const tally = aggregateInputs(state.type, inputs);
+  if (scene.type === 'video') {
+    await runVideoScene(sceneId, scene);
+  } else if (scene.type === 'ending') {
+    await runEndingScene(scene);
+  }
+}
 
-  let body = `<div class="prompt">${escapeHtml(payload.prompt || '')}</div>`;
+async function runVideoScene(sceneId, scene) {
+  // 1) 영상 로드
+  await loadIntoStandby(scene.src);
+  swapVideos();
+  hideOverlay();
+  hideEnding();
 
-  if (!showResults && state.duration > 0) {
-    const remaining = Math.max(0, state.started_at + state.duration - serverNow());
-    body += `<div class="timer ${remaining < 3000 ? 'warning' : ''}">${(remaining/1000).toFixed(1)}s</div>`;
-  } else if (showResults) {
-    body += `<div class="status-line">결과 공개</div>`;
-  } else {
-    body += `<div class="status-line">입력 수집 중 · ${inputCount}명 참여</div>`;
+  // 2) freeze 지점 계산 — duration 알려면 metadata 필요
+  await waitForDuration(activeVideo);
+  const totalDuration = activeVideo.duration || 0;
+
+  let freezeAt = null;
+  if (scene.freeze_at !== undefined) {
+    freezeAt = scene.freeze_at;
+  } else if (scene.freeze_before_end !== undefined) {
+    freezeAt = totalDuration - scene.freeze_before_end;
   }
 
-  if (state.type === 'choice') body += renderBars(payload.options || [], tally, showResults);
-  else if (state.type === 'ox') body += renderOX(tally);
-  else if (state.type === 'qte') body += renderQTE(inputCount);
-  else if (state.type === 'qte_burst') body += renderBurstBoard(tally);
-  else if (state.type === 'text') body += renderWords(tally);
+  // 3) 재생
+  if (freezeAt !== null && scene.overlay) {
+    const slow = scene.slow_duration ?? 2.0;
+    await playUntilFreeze(activeVideo, freezeAt, slow);
 
-  display.innerHTML = body;
-  ensureTimer();
+    // 4) Firebase 에 씬 상태 쓰기 → 청중 폰 알림
+    const fbScene = {
+      scene_id: `${sceneId}_${Date.now()}`,
+      type: scene.overlay.type,
+      started_at: Date.now(),
+      duration: scene.overlay.duration || 10000,
+      payload: {
+        prompt: scene.overlay.prompt,
+        options: scene.overlay.options || (scene.overlay.type === 'ox' ? ['O','X'] : undefined)
+      },
+      phase: 'collecting',
+      updated_at: Date.now()
+    };
+    await set(stateRef, fbScene);
+
+    // 5) inputs 구독 시작 + 오버레이 표시
+    subscribeToInputs(fbScene.scene_id, scene.overlay);
+    showOverlay(fbScene.scene_id, scene.overlay);
+
+    // 6) 투표 시간 동안 대기
+    await sleep(scene.overlay.duration || 10000);
+
+    // 7) 결과 계산
+    const winner = pickWinner(scene.overlay.type, currentInputs, scene.overlay, scene.next);
+    console.log('  Winner:', winner);
+
+    // 8) reveal 단계 — 청중 폰에 결과 화면, 메인엔 우승 하이라이트
+    await update(stateRef, { phase: 'reveal', updated_at: Date.now() });
+    renderOverlay(scene.overlay.options || ['O','X'], aggregateInputs(scene.overlay.type, currentInputs), scene.overlay, true);
+
+    // 9) 결과 음미 시간
+    await sleep(3000);
+
+    // 10) 청중 폰 대기 상태로
+    hideOverlay();
+    if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
+    await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
+
+    // 11) 분기
+    const nextId = scene.next[winner] || scene.next.default;
+    if (nextId) return playScene(nextId);
+  } else {
+    // freeze 없는 단순 재생
+    await playToEnd(activeVideo);
+    if (scene.next) {
+      const nextId = typeof scene.next === 'string' ? scene.next : scene.next.default;
+      if (nextId) return playScene(nextId);
+    }
+  }
 }
 
-function renderBars(options, tally, showResults) {
-  const max = Math.max(1, ...Object.values(tally));
-  const winnerKey = showResults
-    ? Object.entries(tally).sort((a,b)=>b[1]-a[1])[0]?.[0] : null;
-  return `<div class="results">${
-    options.map(opt => {
-      const count = tally[opt] || 0;
-      const pct = (count / max) * 100;
-      const isWinner = opt === winnerKey && count > 0;
-      return `<div class="bar-row ${isWinner ? 'winner' : ''}">
-        <div class="bar-label">${escapeHtml(opt)}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
-        <div class="bar-count">${count}</div>
-      </div>`;
-    }).join('')
-  }</div>`;
+async function runEndingScene(scene) {
+  hideOverlay();
+  // 결말 영상이 있으면 재생
+  if (scene.src) {
+    await loadIntoStandby(scene.src);
+    swapVideos();
+    await playToEnd(activeVideo);
+  }
+  showEnding(scene);
+  await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
 }
 
-function renderOX(tally) {
-  return `<div class="ox-grid">
-    <div class="ox-card O"><div class="ox-symbol">O</div><div class="ox-count">${tally['O'] || 0}</div></div>
-    <div class="ox-card X"><div class="ox-symbol">X</div><div class="ox-count">${tally['X'] || 0}</div></div>
-  </div>`;
+function waitForDuration(video) {
+  return new Promise(resolve => {
+    if (video.duration && !isNaN(video.duration) && isFinite(video.duration)) return resolve();
+    video.addEventListener('loadedmetadata', () => resolve(), { once: true });
+    setTimeout(resolve, 3000);
+  });
 }
 
-function renderQTE(count) {
-  const total = Object.keys(currentUsers).length || 1;
-  const pct = Math.round((count / total) * 100);
-  return `<div class="qte-stats">
-    <div class="stat-card"><div class="stat-label">반응 인원</div><div class="stat-value">${count}</div></div>
-    <div class="stat-card"><div class="stat-label">전체</div><div class="stat-value">${total}</div></div>
-    <div class="stat-card"><div class="stat-label">반응률</div><div class="stat-value">${pct}%</div></div>
-  </div>`;
-}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function renderBurstBoard(tally) {
-  const rows = Object.entries(tally).sort((a,b) => b[1] - a[1]).slice(0, 10);
-  if (!rows.length) return `<div class="status-line">아직 입력 없음</div>`;
-  return `<div class="leaderboard">${
-    rows.map(([name, count], i) => {
-      const cls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
-      return `<div class="lb-row ${cls}">
-        <div class="lb-rank">#${i+1}</div>
-        <div class="lb-name">${escapeHtml(name)}</div>
-        <div class="lb-count">${count}</div>
-      </div>`;
-    }).join('')
-  }</div>`;
-}
-
-function renderWords(tally) {
-  const words = Object.entries(tally).sort((a,b) => b[1] - a[1]);
-  if (!words.length) return `<div class="status-line">응답 대기 중</div>`;
-  return `<div class="word-cloud">${
-    words.map(([w, c]) => {
-      const size = 16 + Math.min(c, 5) * 6;
-      return `<div class="word-bubble" style="font-size:${size}px">
-        ${escapeHtml(w)} ${c > 1 ? `<span style="color:var(--accent)">×${c}</span>` : ''}
-      </div>`;
-    }).join('')
-  }</div>`;
+// ════════════════════════════════════════════════════════════
+// inputs 구독 & 집계
+// ════════════════════════════════════════════════════════════
+function subscribeToInputs(scene_id, overlayDef) {
+  currentInputs = {};
+  if (inputsUnsubscribe) inputsUnsubscribe();
+  inputsUnsubscribe = onValue(ref(db, `inputs/${scene_id}`), (snap) => {
+    currentInputs = snap.val() || {};
+    if (currentOverlayState?.scene_id === scene_id) {
+      const tally = aggregateInputs(overlayDef.type, currentInputs);
+      const opts = overlayDef.options || (overlayDef.type === 'ox' ? ['O','X'] : []);
+      renderOverlay(opts, tally, overlayDef, false);
+    }
+  });
 }
 
 function aggregateInputs(type, inputs) {
@@ -495,27 +703,79 @@ function aggregateInputs(type, inputs) {
   return t;
 }
 
-function ensureTimer() { if (!timerId) timerId = requestAnimationFrame(tickTimer); }
-function stopTimer() { if (timerId) { cancelAnimationFrame(timerId); timerId = null; } }
-function tickTimer() {
-  if (!currentState || currentState.phase === 'reveal' || !currentState.duration) {
-    timerId = null; return;
+function pickWinner(type, inputs, overlayDef, nextMap) {
+  if (type === 'choice' || type === 'ox') {
+    const tally = aggregateInputs(type, inputs);
+    const sorted = Object.entries(tally).sort((a,b) => b[1] - a[1]);
+    return sorted[0]?.[0] || 'default';
   }
-  const remaining = Math.max(0, currentState.started_at + currentState.duration - serverNow());
-  const el = document.querySelector('.timer');
-  if (el) {
-    el.textContent = (remaining/1000).toFixed(1) + 's';
-    if (remaining < 3000) el.classList.add('warning'); else el.classList.remove('warning');
+  if (type === 'qte') {
+    const reacted = Object.keys(inputs).length;
+    // threshold: 청중의 X 비율 이상 반응 시 success
+    const threshold = overlayDef.threshold ?? 0.5;
+    const total = Object.keys(currentUsers).length || 1;
+    return (reacted / total >= threshold) ? 'success' : 'fail';
   }
-  timerId = requestAnimationFrame(tickTimer);
+  return 'default';
 }
-function serverNow() { return Date.now() + serverOffset; }
 
+// ════════════════════════════════════════════════════════════
+// 참가자 & 연결 상태
+// ════════════════════════════════════════════════════════════
+let currentUsers = {};
+onValue(usersRef, (snap) => {
+  currentUsers = snap.val() || {};
+  const count = Object.keys(currentUsers).length;
+  document.getElementById('userCount').textContent = count;
+  document.getElementById('hudUsers').textContent = count;
+});
+
+onValue(ref(db, '.info/connected'), (snap) => {
+  const ok = !!snap.val();
+  document.getElementById('connDot').classList.toggle('live', ok);
+  document.getElementById('hudConn').textContent = ok ? 'LIVE' : 'OFFLINE';
+  document.getElementById('connText').textContent = ok ? 'LIVE 연결됨' : '연결 중...';
+});
+
+// ════════════════════════════════════════════════════════════
+// 게임 컨트롤
+// ════════════════════════════════════════════════════════════
+async function startGame() {
+  document.getElementById('startScreen').classList.add('hide');
+  // 청중 입력 초기화
+  await remove(ref(db, 'inputs'));
+  // 시작 씬 재생
+  playScene(START_SCENE);
+}
+
+window.restartGame = async function() {
+  document.getElementById('restartBtn').style.display = 'none';
+  hideEnding();
+  hideOverlay();
+  vA.pause(); vB.pause();
+  vA.src = ''; vB.src = '';
+  vA.classList.remove('active');
+  vB.classList.remove('active');
+  if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
+  await remove(ref(db, 'inputs'));
+  await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
+  document.getElementById('startScreen').classList.remove('hide');
+};
+
+document.getElementById('startBtn').onclick = startGame;
+document.getElementById('restartBtn').onclick = window.restartGame;
+
+// ════════════════════════════════════════════════════════════
+// 유틸
+// ════════════════════════════════════════════════════════════
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
 }
+
+// 초기화: idle 상태로 셋
+set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
 </script>
 </body>
 </html>
