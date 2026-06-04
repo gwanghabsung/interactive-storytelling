@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0f">
+<title>참여 · Audience Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #15151c; --surface-2: #1f1f28;
+    --line: #2a2a36; --text: #f5f5f7; --muted: #6a6a7e;
+    --accent: #ffd60a; --danger: #ff3d71; --success: #00d68f;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Bricolage Grotesque', sans-serif;
+    min-height: 100vh; overflow-x: hidden;
+    user-select: none; -webkit-user-select: none;
+  }
+  .container {
+    max-width: 520px; margin: 0 auto;
+    padding: 24px 20px max(24px, env(safe-area-inset-bottom));
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 16px; border-bottom: 1px solid var(--line); margin-bottom: 24px;
+  }
+  .brand {
+    font-weight: 800; font-size: 11px; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .brand::before {
+    content: '◉'; color: var(--success); margin-right: 6px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .user-tag { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+  .user-tag b { color: var(--text); }
+  .logout-btn {
+    margin-left: 8px; padding: 3px 8px; background: transparent;
+    border: 1px solid var(--line); color: var(--muted); border-radius: 4px;
+    font-size: 10px; font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.1em; cursor: pointer; display: none; transition: all 0.15s;
+  }
+  .logout-btn:hover { color: var(--danger); border-color: var(--danger); }
+  .body { flex: 1; display: flex; flex-direction: column; }
+  .join { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 24px; }
+  .join h1 { font-size: 40px; font-weight: 700; margin: 0; line-height: 1.1; letter-spacing: -0.02em; }
+  .join p { color: var(--muted); margin: 0; font-size: 15px; line-height: 1.5; }
+  .nick-input {
+    background: var(--surface); border: 2px solid var(--line); color: var(--text);
+    padding: 18px 20px; border-radius: 12px; font-size: 18px;
+    font-family: inherit; width: 100%; transition: border-color 0.2s;
+  }
+  .nick-input:focus { outline: none; border-color: var(--accent); }
+  .waiting {
+    flex: 1; display: flex; flex-direction: column; justify-content: center;
+    align-items: center; text-align: center; gap: 24px; padding: 40px 0;
+  }
+  .waiting-dot {
+    width: 80px; height: 80px;
+    border: 3px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 1.2s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .waiting h2 { margin: 0; font-size: 22px; font-weight: 500; }
+  .waiting p { margin: 0; color: var(--muted); font-size: 13px;
+               font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em; }
+  .scene { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+  .scene-prompt { font-size: 26px; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; }
+  .timer-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    color: var(--muted); padding: 6px 12px; background: var(--surface);
+    border-radius: 999px; display: inline-flex; align-items: center;
+    gap: 6px; align-self: flex-start;
+  }
+  .timer-pill.warning { color: var(--danger); }
+  .timer-pill b { color: var(--text); font-weight: 700; }
+  .choice-list { display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
+  .choice-btn {
+    width: 100%; background: var(--surface); border: 2px solid var(--line);
+    color: var(--text); padding: 22px 20px; border-radius: 14px;
+    font-family: inherit; font-size: 18px; font-weight: 500;
+    text-align: left; cursor: pointer; transition: all 0.15s;
+  }
+  .choice-btn:active { transform: scale(0.98); border-color: var(--accent); }
+  .choice-btn.selected {
+    border-color: var(--accent);
+    background: rgba(255,214,10,0.08);
+  }
+  .choice-btn.selected::before {
+    content: '✓ '; color: var(--accent); font-weight: 700;
+  }
+  .choice-btn.locked { opacity: 0.5; pointer-events: none; }
+  .choice-btn.locked.selected { opacity: 1; }
+  .ox-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; }
+  .ox-btn {
+    border: 3px solid var(--line); background: var(--surface); color: var(--text);
+    border-radius: 16px; font-family: inherit; font-size: 100px; font-weight: 800;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .ox-btn.O { color: var(--success); }
+  .ox-btn.X { color: var(--danger); }
+  .ox-btn:active { transform: scale(0.96); }
+  .ox-btn.O:active { border-color: var(--success); }
+  .ox-btn.X:active { border-color: var(--danger); }
+  .ox-btn.selected.O { background: rgba(0,214,143,0.15); border-color: var(--success); }
+  .ox-btn.selected.X { background: rgba(255,61,113,0.15); border-color: var(--danger); }
+  .ox-btn.locked { opacity: 0.5; pointer-events: none; }
+  .ox-btn.locked.selected { opacity: 1; }
+  .selection-hint {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--muted); letter-spacing: 0.05em;
+    padding: 8px 12px; background: var(--surface);
+    border-radius: 8px; align-self: flex-start;
+    transition: all 0.2s;
+  }
+  .selection-hint.has-selection { color: var(--accent); }
+  .selection-hint.locked { color: var(--danger); }
+  .qte-btn {
+    flex: 1; background: linear-gradient(135deg, var(--danger), #c41545);
+    border: none; color: white; border-radius: 20px;
+    font-family: inherit; font-size: 42px; font-weight: 800; cursor: pointer;
+    letter-spacing: 0.05em; box-shadow: 0 0 40px rgba(255,61,113,0.4);
+    transition: transform 0.1s;
+  }
+  .qte-btn:active { transform: scale(0.95); }
+  .burst-wrap { flex: 1; display: flex; flex-direction: column; gap: 16px; }
+  .burst-count {
+    text-align: center; font-family: 'JetBrains Mono', monospace;
+    font-size: 80px; font-weight: 700; color: var(--accent);
+    line-height: 1; padding: 24px 0;
+  }
+  .burst-btn {
+    flex: 1; background: linear-gradient(135deg, var(--accent), #ff8c00);
+    border: none; color: #000; border-radius: 20px;
+    font-family: inherit; font-size: 36px; font-weight: 800;
+    cursor: pointer; box-shadow: 0 0 30px rgba(255,214,10,0.3);
+    transition: transform 0.05s;
+  }
+  .burst-btn:active { transform: scale(0.97); }
+  .text-form { display: flex; flex-direction: column; gap: 14px; }
+  .text-input {
+    background: var(--surface); border: 2px solid var(--line); color: var(--text);
+    padding: 20px; border-radius: 14px; font-size: 24px; font-family: inherit;
+    text-align: center; transition: border-color 0.2s;
+  }
+  .text-input:focus { outline: none; border-color: var(--accent); }
+  .submit-text {
+    background: var(--accent); color: #000; border: none;
+    padding: 18px; border-radius: 14px;
+    font-family: inherit; font-size: 18px; font-weight: 700; cursor: pointer;
+  }
+  .submitted {
+    flex: 1; display: flex; flex-direction: column; justify-content: center;
+    align-items: center; text-align: center; gap: 16px;
+  }
+  .check {
+    width: 100px; height: 100px; border-radius: 50%;
+    background: var(--success); color: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 60px; font-weight: 800;
+    animation: pop 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  .submitted h3 { margin: 0; font-size: 24px; }
+  .submitted p { margin: 0; color: var(--muted); font-size: 14px;
+                 font-family: 'JetBrains Mono', monospace; }
+  .submitted .my-answer {
+    margin-top: 12px; padding: 12px 20px; background: var(--surface);
+    border-radius: 10px; border: 1px solid var(--line); font-size: 16px;
+  }
+  /* ── 결과 공개 화면 ── */
+  .reveal-screen { flex: 1; display: flex; flex-direction: column; gap: 16px; }
+  .reveal-prompt { font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; }
+  .reveal-status {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em;
+  }
+  .my-answer-pill {
+    padding: 10px 16px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 999px;
+    font-size: 14px; color: var(--muted); align-self: flex-start;
+  }
+  .my-answer-pill b { color: var(--accent); }
+  .results-area { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+  .result-bar { display: flex; flex-direction: column; gap: 6px; }
+  .result-bar-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 16px;
+  }
+  .result-bar.mine .result-label::after { content: ' ★'; color: var(--accent); }
+  .result-bar-header .result-count {
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--muted);
+  }
+  .result-bar-track {
+    background: var(--surface-2); border-radius: 6px;
+    height: 28px; overflow: hidden;
+  }
+  .result-bar-fill {
+    height: 100%; background: var(--muted);
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 0%;
+  }
+  .result-bar.winner .result-bar-fill {
+    background: linear-gradient(90deg, var(--success), #00d68f);
+  }
+  .result-bar.mine .result-bar-fill {
+    background: linear-gradient(90deg, var(--accent), #ff8c00);
+  }
+  .result-bar.mine.winner .result-bar-fill {
+    background: linear-gradient(90deg, var(--success), var(--accent));
+  }
+  .qte-result {
+    display: flex; flex-direction: column; gap: 12px;
+    padding: 18px; background: var(--surface); border-radius: 12px;
+  }
+  .qte-result-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 16px;
+  }
+  .qte-result-row b {
+    font-family: 'JetBrains Mono', monospace; font-size: 22px; color: var(--accent);
+  }
+  .qte-result-mine {
+    padding: 14px; border-radius: 10px; text-align: center;
+    font-size: 16px; font-weight: 600;
+  }
+  .qte-result-mine.success { background: rgba(0,214,143,0.15); color: var(--success); }
+  .qte-result-mine.fail { background: rgba(255,61,113,0.15); color: var(--danger); }
+  .leaderboard-mobile { display: flex; flex-direction: column; gap: 6px; }
+  .lb-mobile-row {
+    display: grid; grid-template-columns: 32px 1fr 60px;
+    align-items: center; padding: 10px 14px;
+    background: var(--surface); border-radius: 8px;
+    border-left: 3px solid var(--line); font-size: 14px;
+  }
+  .lb-mobile-row.top1 { border-left-color: var(--accent); }
+  .lb-mobile-row.top2 { border-left-color: #c9c9d8; }
+  .lb-mobile-row.top3 { border-left-color: #cd7f32; }
+  .lb-mobile-row.mine { background: rgba(255,214,10,0.1); border-left-color: var(--accent); }
+  .lb-mobile-row .lb-rank {
+    font-family: 'JetBrains Mono', monospace; color: var(--muted); font-weight: 700;
+  }
+  .lb-mobile-row .lb-count {
+    text-align: right; font-family: 'JetBrains Mono', monospace;
+    font-weight: 700; color: var(--accent);
+  }
+  .words-mobile { display: flex; flex-wrap: wrap; gap: 8px; }
+  .word-chip {
+    padding: 8px 14px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 999px; font-size: 14px;
+    animation: drop 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .word-chip.mine {
+    border-color: var(--accent); background: rgba(255,214,10,0.1); color: var(--accent);
+    font-weight: 600;
+  }
+  @keyframes drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .conn-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 8px; background: var(--danger); color: #fff;
+    text-align: center; font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    transform: translateY(100%); transition: transform 0.3s;
+  }
+  .conn-bar.show { transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header class="header">
+    <div class="brand">Audience Live · S01</div>
+    <div class="user-tag">
+      <span id="userTagText">미접속</span>
+      <button class="logout-btn" id="logoutBtn" onclick="logout()">LOGOUT</button>
+    </div>
+  </header>
+
+  <div class="body" id="body">
+    <!-- 동적 렌더링 -->
+  </div>
+</div>
+
+<div class="conn-bar" id="connBar">연결이 끊겼어요. 재시도 중…</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+import {
+  getDatabase, ref, onValue, set, remove
+} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+// ════════════════════════════════════════════════════════════
+// Firebase 설정 — main.html 과 동일한 객체로 교체
+// ════════════════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyCl0_QKjC8LxEYNMQLNh1EJWBZom2CFXro",
+  authDomain: "gen-lang-client-0314320228.firebaseapp.com",
+  databaseURL: "https://gen-lang-client-0314320228-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "gen-lang-client-0314320228",
+  storageBucket: "gen-lang-client-0314320228.firebasestorage.app",
+  messagingSenderId: "1077038002206",
+  appId: "1:1077038002206:web:217cd7401a119e9aee7e0f"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// ════════════════════════════════════════════════════════════
+// 상태
+// ════════════════════════════════════════════════════════════
+let user = JSON.parse(localStorage.getItem('audience_user') || 'null');
+let currentSceneId = null;
+let currentState = null;
+let currentInputs = {};
+let inputsUnsubscribe = null;
+let submitted = false;
+let burstCount = 0;
+let serverOffset = 0;
+let timerId = null;
+let burstAutoSubmitId = null;
+let stateUnsubscribe = null;
+
+// 서버 시간 오프셋
+onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
+  serverOffset = snap.val() || 0;
+});
+
+// 연결 상태
+onValue(ref(db, '.info/connected'), (snap) => {
+  const ok = !!snap.val();
+  document.getElementById('connBar').classList.toggle('show', !ok);
+});
+
+// ════════════════════════════════════════════════════════════
+// 화면 렌더링
+// ════════════════════════════════════════════════════════════
+function renderJoin() {
+  document.getElementById('userTagText').textContent = '미접속';
+  document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('body').innerHTML = `
+    <div class="join">
+      <div>
+        <h1>참여하기</h1>
+        <p>닉네임을 입력하고 시작하세요.<br>메인 화면에 표시될 수 있어요.</p>
+      </div>
+      <input class="nick-input" id="nickInput" maxlength="12"
+             placeholder="닉네임 (최대 12자)" autocomplete="off">
+      <button class="submit-text" id="joinBtn">참여하기</button>
+    </div>
+  `;
+  document.getElementById('nickInput').focus();
+  document.getElementById('joinBtn').onclick = doJoin;
+  document.getElementById('nickInput').onkeydown = (e) => {
+    if (e.key === 'Enter') doJoin();
+  };
+}
+
+async function doJoin() {
+  const nick = document.getElementById('nickInput').value.trim();
+  if (!nick) return;
+  user = {
+    user_id: 'u_' + Math.random().toString(36).slice(2, 10),
+    nickname: nick
+  };
+  localStorage.setItem('audience_user', JSON.stringify(user));
+  await set(ref(db, `users/${user.user_id}`), {
+    nickname: nick,
+    joined_at: Date.now()
+  });
+  document.getElementById('userTagText').innerHTML = `👤 <b>${escapeHtml(user.nickname)}</b>`;
+  document.getElementById('logoutBtn').style.display = 'inline-block';
+  subscribeToState();
+}
+
+function renderWaiting() {
+  document.getElementById('body').innerHTML = `
+    <div class="waiting">
+      <div class="waiting-dot"></div>
+      <h2>대기 중</h2>
+      <p>메인 화면에서 다음 씬을 준비하고 있어요</p>
+    </div>
+  `;
+  stopTimer();
+}
+
+function renderReveal() {
+  document.getElementById('body').innerHTML = `
+    <div class="waiting">
+      <div style="font-size:72px">🎬</div>
+      <h2>결과 확인 중</h2>
+      <p>메인 화면을 봐주세요</p>
+    </div>
+  `;
+  stopTimer();
+}
+
+// 결과 공개 화면 — 청중 폰에서 직접 집계 결과 표시
+function renderRevealResults(state, inputs) {
+  const p = state.payload || {};
+  const type = state.type;
+  const myInput = user ? inputs[user.user_id] : null;
+  const myAnswer = formatMyAnswer(myInput);
+  const totalSubmissions = Object.keys(inputs).length;
+
+  let resultsHtml = '';
+
+  if (type === 'choice' || type === 'ox') {
+    const tally = aggregateInputs(type, inputs);
+    const options = type === 'ox' ? ['O', 'X'] : (p.options || []);
+    const max = Math.max(1, ...Object.values(tally), 1);
+    const winnerKey = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0]?.[0];
+
+    resultsHtml = options.map(opt => {
+      const count = tally[opt] || 0;
+      const pct = totalSubmissions ? Math.round((count / totalSubmissions) * 100) : 0;
+      const isWinner = opt === winnerKey && count > 0;
+      const isMine = myInput?.input?.choice === opt;
+      return `
+        <div class="result-bar ${isWinner ? 'winner' : ''} ${isMine ? 'mine' : ''}">
+          <div class="result-bar-header">
+            <span class="result-label">${escapeHtml(opt)}</span>
+            <span class="result-count">${count}표 · ${pct}%</span>
+          </div>
+          <div class="result-bar-track">
+            <div class="result-bar-fill" style="width:${(count/max)*100}%"></div>
+          </div>
+        </div>`;
+    }).join('');
+  } else if (type === 'qte') {
+    const reacted = totalSubmissions;
+    const myReact = !!myInput;
+    resultsHtml = `
+      <div class="qte-result">
+        <div class="qte-result-row">
+          <span>반응한 사람</span>
+          <b>${reacted}명</b>
+        </div>
+        <div class="qte-result-mine ${myReact ? 'success' : 'fail'}">
+          ${myReact ? '✓ 당신은 반응했어요!' : '✗ 놓쳤어요'}
+        </div>
+      </div>`;
+  } else if (type === 'qte_burst') {
+    const tally = aggregateInputs(type, inputs);
+    const rows = Object.entries(tally).sort((a,b) => b[1] - a[1]);
+    const myCount = myInput?.input?.count || 0;
+    const myRankIdx = rows.findIndex(([name]) => name === user?.nickname);
+    const myRank = myRankIdx >= 0 ? myRankIdx + 1 : null;
+
+    resultsHtml = `
+      <div class="qte-result">
+        <div class="qte-result-mine success">
+          나의 기록: <b style="font-size:24px">${myCount}회</b>${myRank ? ` · #${myRank}` : ''}
+        </div>
+      </div>
+      <div class="leaderboard-mobile">
+        ${rows.slice(0, 5).map(([name, count], i) => {
+          const cls = [
+            i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '',
+            name === user?.nickname ? 'mine' : ''
+          ].filter(Boolean).join(' ');
+          return `<div class="lb-mobile-row ${cls}">
+            <span class="lb-rank">#${i+1}</span>
+            <span class="lb-name">${escapeHtml(name)}</span>
+            <span class="lb-count">${count}</span>
+          </div>`;
+        }).join('')}
+      </div>`;
+  } else if (type === 'text') {
+    const tally = aggregateInputs(type, inputs);
+    const words = Object.entries(tally).sort((a,b) => b[1] - a[1]);
+    const myWord = myInput?.input?.text?.trim();
+    resultsHtml = words.length
+      ? `<div class="words-mobile">${
+          words.map(([w, c]) => {
+            const isMine = myWord === w;
+            return `<div class="word-chip ${isMine ? 'mine' : ''}">
+              ${escapeHtml(w)}${c > 1 ? ` <span style="opacity:.7">×${c}</span>` : ''}
+            </div>`;
+          }).join('')
+        }</div>`
+      : '<div style="color:var(--muted);font-size:13px">응답 없음</div>';
+  }
+
+  document.getElementById('body').innerHTML = `
+    <div class="reveal-screen">
+      <div class="reveal-status">결과 공개 · 총 ${totalSubmissions}명 참여</div>
+      <div class="reveal-prompt">${escapeHtml(p.prompt || '')}</div>
+      ${myAnswer ? `<div class="my-answer-pill">내 응답: <b>${escapeHtml(myAnswer)}</b></div>` : ''}
+      <div class="results-area">${resultsHtml}</div>
+    </div>
+  `;
+  stopTimer();
+}
+
+function formatMyAnswer(myInput) {
+  if (!myInput?.input) return null;
+  const p = myInput.input;
+  if (p.choice) return p.choice;
+  if (p.text) return p.text;
+  if (p.count != null) return `${p.count} taps`;
+  if (p.tapped_at) return '✓ 반응';
+  return null;
+}
+
+function aggregateInputs(type, inputs) {
+  const t = {};
+  for (const userId in inputs) {
+    const i = inputs[userId];
+    if (!i) continue;
+    if (type === 'choice' || type === 'ox') {
+      const k = i.input?.choice;
+      if (k) t[k] = (t[k] || 0) + 1;
+    } else if (type === 'qte_burst') {
+      t[i.nickname] = i.input?.count || 0;
+    } else if (type === 'text') {
+      const w = (i.input?.text || '').trim();
+      if (w) t[w] = (t[w] || 0) + 1;
+    }
+  }
+  return t;
+}
+
+function renderScene(state) {
+  const p = state.payload || {};
+  const type = state.type;
+  const timerHtml = state.duration > 0
+    ? `<div class="timer-pill" id="timer">⏱ <b>--</b>초 남음</div>` : '';
+
+  let inputUi = '';
+
+  if (type === 'choice') {
+    inputUi = `<div class="choice-list">${
+      (p.options || []).map(opt =>
+        `<button class="choice-btn" data-opt='${escapeHtml(JSON.stringify(opt))}'>
+          ${escapeHtml(opt)}
+        </button>`
+      ).join('')
+    }</div>`;
+  } else if (type === 'ox') {
+    inputUi = `<div class="ox-buttons">
+      <button class="ox-btn O" data-ox="O">O</button>
+      <button class="ox-btn X" data-ox="X">X</button>
+    </div>`;
+  } else if (type === 'qte') {
+    inputUi = `<button class="qte-btn" id="qteBtn">TAP!</button>`;
+  } else if (type === 'qte_burst') {
+    inputUi = `
+      <div class="burst-wrap">
+        <div class="burst-count" id="burstCount">0</div>
+        <button class="burst-btn" id="burstBtn">TAP TAP TAP</button>
+      </div>`;
+  } else if (type === 'text') {
+    inputUi = `
+      <div class="text-form">
+        <input class="text-input" id="textInput" maxlength="20"
+               placeholder="한 단어로 입력..." autocomplete="off">
+        <button class="submit-text" id="textSubmit">제출</button>
+      </div>`;
+  }
+
+  const hintHtml = (type === 'choice' || type === 'ox')
+    ? `<div class="selection-hint" id="selectionHint">탭해서 선택 · 시간 내 자유롭게 변경 가능</div>`
+    : '';
+
+  document.getElementById('body').innerHTML = `
+    <div class="scene">
+      <div class="scene-prompt">${escapeHtml(p.prompt || '')}</div>
+      ${timerHtml}
+      ${hintHtml}
+      ${inputUi}
+    </div>
+  `;
+
+  // 이벤트 바인딩
+  if (type === 'choice') {
+    document.querySelectorAll('.choice-btn').forEach(btn => {
+      btn.onclick = () => {
+        const opt = JSON.parse(btn.dataset.opt);
+        submitChoice(opt);
+      };
+    });
+  } else if (type === 'ox') {
+    document.querySelectorAll('.ox-btn').forEach(btn => {
+      btn.onclick = () => submitChoice(btn.dataset.ox);
+    });
+  } else if (type === 'qte') {
+    document.getElementById('qteBtn').onclick = submitQTE;
+  } else if (type === 'qte_burst') {
+    document.getElementById('burstBtn').onclick = tickBurst;
+  } else if (type === 'text') {
+    document.getElementById('textSubmit').onclick = submitText;
+    document.getElementById('textInput').focus();
+    document.getElementById('textInput').onkeydown = (e) => {
+      if (e.key === 'Enter') submitText();
+    };
+  }
+
+  // 이미 선택했던 게 있으면 시각적으로 복원 (예: 새로고침 후 동일 user_id 면)
+  if ((type === 'choice' || type === 'ox') && user) {
+    const myInput = currentInputs[user.user_id];
+    if (myInput?.input?.choice) {
+      updateChoiceSelection(myInput.input.choice);
+    }
+  }
+
+  startTimerLoop(state);
+
+  // qte_burst 시간 종료 시 자동 제출
+  if (type === 'qte_burst') {
+    const remaining = state.started_at + state.duration - serverNow();
+    burstCount = 0;
+    if (burstAutoSubmitId) clearTimeout(burstAutoSubmitId);
+    burstAutoSubmitId = setTimeout(() => {
+      if (!submitted && burstCount > 0) {
+        submitInput({ count: burstCount }, `${burstCount} taps`);
+      } else if (!submitted) {
+        submitted = true;
+        renderSubmitted('참여 안 함');
+      }
+    }, Math.max(0, remaining));
+  }
+}
+
+function renderSubmitted(answerLabel) {
+  document.getElementById('body').innerHTML = `
+    <div class="submitted">
+      <div class="check">✓</div>
+      <h3>제출 완료</h3>
+      <p>잠시만 기다려 주세요</p>
+      ${answerLabel ? `<div class="my-answer">내 응답: <b>${escapeHtml(answerLabel)}</b></div>` : ''}
+    </div>
+  `;
+  stopTimer();
+}
+
+// ════════════════════════════════════════════════════════════
+// 입력 제출
+// ════════════════════════════════════════════════════════════
+function submitInput(payload, label) {
+  if (submitted || !currentSceneId) return;
+  submitted = true;
+  renderSubmitted(label);
+  set(ref(db, `inputs/${currentSceneId}/${user.user_id}`), {
+    timestamp: Date.now(),
+    nickname: user.nickname,
+    input: payload
+  }).catch(err => console.warn('submit failed', err));
+}
+function submitChoice(opt) {
+  if (!currentSceneId || !user) return;
+  // 이미 잠겼거나 reveal 단계면 무시
+  if (submitted || currentState?.phase === 'reveal') return;
+
+  // Firebase 에 덮어쓰기 (user_id 키라서 자동 last-write-wins)
+  set(ref(db, `inputs/${currentSceneId}/${user.user_id}`), {
+    timestamp: Date.now(),
+    nickname: user.nickname,
+    input: { choice: opt }
+  }).catch(err => console.warn('submit failed', err));
+
+  // 시각적으로 선택 표시
+  updateChoiceSelection(opt);
+}
+
+// 선택 버튼 시각적 갱신 (DOM 만 업데이트, 전체 재렌더 안 함)
+function updateChoiceSelection(opt) {
+  document.querySelectorAll('.choice-btn, .ox-btn').forEach(btn => {
+    btn.classList.remove('selected');
+  });
+  if (currentState?.type === 'ox') {
+    document.querySelector(`.ox-btn[data-ox="${opt}"]`)?.classList.add('selected');
+  } else {
+    document.querySelectorAll('.choice-btn').forEach(btn => {
+      try {
+        if (JSON.parse(btn.dataset.opt) === opt) btn.classList.add('selected');
+      } catch(e) {}
+    });
+  }
+  const hint = document.getElementById('selectionHint');
+  if (hint) {
+    hint.textContent = `✓ 현재 선택: ${opt} · 다시 탭하면 변경됨`;
+    hint.classList.add('has-selection');
+  }
+}
+
+function submitQTE() { submitInput({ tapped_at: Date.now() }, '✓ 반응'); }
+function submitText() {
+  const v = document.getElementById('textInput').value.trim();
+  if (!v) return;
+  submitInput({ text: v }, v);
+}
+function tickBurst() {
+  if (submitted) return;
+  burstCount++;
+  const el = document.getElementById('burstCount');
+  if (el) {
+    el.textContent = burstCount;
+    el.style.transform = 'scale(1.1)';
+    requestAnimationFrame(() => el.style.transform = 'scale(1)');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// 타이머
+// ════════════════════════════════════════════════════════════
+function startTimerLoop(state) {
+  stopTimer();
+  if (state.duration === 0) return;
+  const update = () => {
+    const remaining = Math.max(0, state.started_at + state.duration - serverNow());
+    const el = document.getElementById('timer');
+    if (!el) return;
+    el.querySelector('b').textContent = (remaining/1000).toFixed(1);
+    if (remaining < 3000) el.classList.add('warning'); else el.classList.remove('warning');
+    if (remaining <= 0) {
+      if (state.type === 'choice' || state.type === 'ox') {
+        // 선택지/OX: 마지막 선택 확정 잠금
+        document.querySelectorAll('.choice-btn, .ox-btn').forEach(b => b.classList.add('locked'));
+        const hint = document.getElementById('selectionHint');
+        if (hint) {
+          const mine = user ? currentInputs[user.user_id]?.input?.choice : null;
+          hint.textContent = mine ? `🔒 최종 확정: ${mine}` : '🔒 시간 종료 (선택 없음)';
+          hint.classList.remove('has-selection');
+          hint.classList.add('locked');
+        }
+      } else if (!submitted && state.type !== 'qte_burst') {
+        document.querySelectorAll('button, input').forEach(b => b.disabled = true);
+      }
+      return;
+    }
+    timerId = requestAnimationFrame(update);
+  };
+  timerId = requestAnimationFrame(update);
+}
+function stopTimer() { if (timerId) { cancelAnimationFrame(timerId); timerId = null; } }
+function serverNow() { return Date.now() + serverOffset; }
+
+// ════════════════════════════════════════════════════════════
+// 상태 구독
+// ════════════════════════════════════════════════════════════
+function subscribeToState() {
+  renderWaiting();
+  if (stateUnsubscribe) stateUnsubscribe();
+  stateUnsubscribe = onValue(ref(db, 'gameState'), (snap) => {
+    const state = snap.val() || {
+      scene_id: '', type: 'idle', phase: 'idle', duration: 0, started_at: 0
+    };
+
+    const sceneChanged = state.scene_id !== currentSceneId;
+    const wasRevealing = currentState?.phase === 'reveal';
+
+    if (sceneChanged) {
+      currentSceneId = state.scene_id;
+      submitted = false;
+      burstCount = 0;
+      currentInputs = {};
+      if (burstAutoSubmitId) { clearTimeout(burstAutoSubmitId); burstAutoSubmitId = null; }
+      if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
+
+      // 새 씬에 대한 inputs 구독 시작 — 결과 공개 시 실시간 갱신용
+      if (state.scene_id) {
+        inputsUnsubscribe = onValue(ref(db, `inputs/${state.scene_id}`), (s) => {
+          currentInputs = s.val() || {};
+          // 이미 reveal 단계면 결과 다시 그리기
+          if (currentState?.phase === 'reveal') {
+            renderRevealResults(currentState, currentInputs);
+          }
+        });
+      }
+    }
+
+    currentState = state;
+
+    // 화면 분기
+    if (!state.scene_id || state.type === 'idle' || state.phase === 'idle') {
+      if (sceneChanged) renderWaiting();
+    } else if (state.phase === 'reveal') {
+      // reveal 진입 시(또는 이미 reveal 인데 씬 바뀐 경우) 결과 화면
+      renderRevealResults(state, currentInputs);
+    } else if (sceneChanged) {
+      // collecting 단계 — 입력 UI
+      renderScene(state);
+    } else if (wasRevealing && state.phase === 'collecting') {
+      // reveal 에서 다시 collecting 으로 돌아온 희귀 케이스
+      renderScene(state);
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// 로그아웃
+// ════════════════════════════════════════════════════════════
+window.logout = function() {
+  if (!confirm('로그아웃 할까요?')) return;
+  if (user) remove(ref(db, `users/${user.user_id}`));
+  localStorage.removeItem('audience_user');
+  user = null;
+  if (stateUnsubscribe) stateUnsubscribe();
+  if (inputsUnsubscribe) inputsUnsubscribe();
+  location.reload();
+};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+// ════════════════════════════════════════════════════════════
+// 시작
+// ════════════════════════════════════════════════════════════
+if (user) {
+  document.getElementById('userTagText').innerHTML = `👤 <b>${escapeHtml(user.nickname)}</b>`;
+  document.getElementById('logoutBtn').style.display = 'inline-block';
+  // 재접속 시 users 노드에도 다시 등록
+  set(ref(db, `users/${user.user_id}`), {
+    nickname: user.nickname,
+    joined_at: Date.now()
+  });
+  subscribeToState();
+} else {
+  renderJoin();
+}
+</script>
+</body>
+</html>

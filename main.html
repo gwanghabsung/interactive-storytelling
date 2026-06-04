@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>MAIN — Interactive Audience Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #15151c;
+    --surface-2: #1f1f28;
+    --line: #2a2a36;
+    --text: #f5f5f7;
+    --muted: #6a6a7e;
+    --accent: #ffd60a;
+    --danger: #ff3d71;
+    --success: #00d68f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Bricolage Grotesque', sans-serif;
+    min-height: 100vh; overflow-x: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: radial-gradient(ellipse at top right, rgba(255,214,10,0.06), transparent 50%),
+                radial-gradient(ellipse at bottom left, rgba(255,61,113,0.04), transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+  .app {
+    display: grid; grid-template-columns: 1fr 360px; gap: 24px;
+    padding: 24px; min-height: 100vh; position: relative; z-index: 1;
+  }
+  .stage {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; padding: 40px;
+    display: flex; flex-direction: column; gap: 24px;
+    min-height: calc(100vh - 48px);
+  }
+  .stage-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--line); padding-bottom: 16px;
+  }
+  .brand {
+    font-weight: 800; font-size: 14px; letter-spacing: 0.15em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .brand::before { content: '◉ '; color: var(--danger); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .scene-meta {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--muted); letter-spacing: 0.05em;
+  }
+  .scene-meta b { color: var(--text); }
+  .scene-display {
+    flex: 1; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; text-align: center;
+    gap: 32px; padding: 40px 20px;
+  }
+  .prompt {
+    font-size: clamp(32px, 5vw, 56px); font-weight: 600;
+    line-height: 1.2; max-width: 900px; letter-spacing: -0.02em;
+  }
+  .timer {
+    font-family: 'JetBrains Mono', monospace; font-size: 72px;
+    font-weight: 700; color: var(--accent); letter-spacing: -0.05em;
+    transition: color 0.3s;
+  }
+  .timer.warning { color: var(--danger); animation: shake 0.3s ease-in-out infinite; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); } 75% { transform: translateX(2px); }
+  }
+  .status-line {
+    font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.2em;
+  }
+  .results { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 14px; }
+  .bar-row {
+    display: grid; grid-template-columns: 180px 1fr 80px;
+    gap: 16px; align-items: center;
+  }
+  .bar-label { font-size: 20px; font-weight: 500; text-align: left; }
+  .bar-track { background: var(--surface-2); border-radius: 6px; height: 36px; overflow: hidden; }
+  .bar-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), #ff8c00);
+    transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); width: 0%;
+  }
+  .bar-row.winner .bar-fill { background: linear-gradient(90deg, var(--success), #00d68f); }
+  .bar-count { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; text-align: right; }
+  .ox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; width: 100%; max-width: 700px; }
+  .ox-card {
+    background: var(--surface-2); border: 2px solid var(--line);
+    border-radius: 12px; padding: 40px 20px; text-align: center;
+    transition: all 0.4s;
+  }
+  .ox-card.O { border-color: var(--success); }
+  .ox-card.X { border-color: var(--danger); }
+  .ox-symbol { font-size: 120px; font-weight: 800; line-height: 1; }
+  .ox-card.O .ox-symbol { color: var(--success); }
+  .ox-card.X .ox-symbol { color: var(--danger); }
+  .ox-count { font-family: 'JetBrains Mono', monospace; font-size: 48px; font-weight: 700; margin-top: 16px; }
+  .qte-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; width: 100%; max-width: 800px; }
+  .stat-card {
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 12px; padding: 28px; text-align: center;
+  }
+  .stat-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.15em; }
+  .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 56px; font-weight: 700; color: var(--accent); margin-top: 8px; }
+  .leaderboard { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 8px; }
+  .lb-row {
+    display: grid; grid-template-columns: 40px 1fr 80px;
+    align-items: center; padding: 12px 20px; background: var(--surface-2);
+    border-radius: 8px; border-left: 3px solid var(--line); transition: all 0.3s;
+  }
+  .lb-row.top1 { border-left-color: var(--accent); background: rgba(255,214,10,0.08); }
+  .lb-row.top2 { border-left-color: #c9c9d8; }
+  .lb-row.top3 { border-left-color: #cd7f32; }
+  .lb-rank { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--muted); }
+  .lb-name { font-weight: 500; font-size: 18px; }
+  .lb-count { font-family: 'JetBrains Mono', monospace; font-weight: 700; text-align: right; font-size: 20px; color: var(--accent); }
+  .word-cloud { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; max-width: 900px; }
+  .word-bubble {
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 10px 20px; font-size: 18px;
+    animation: drop 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes drop { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  .idle-screen { text-align: center; opacity: 0.5; }
+  .idle-screen h2 { font-size: 32px; margin: 0 0 8px; }
+  .idle-screen p { color: var(--muted); margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; padding: 24px;
+    display: flex; flex-direction: column; gap: 16px;
+    max-height: calc(100vh - 48px); overflow-y: auto;
+  }
+  .panel-title {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.2em;
+    color: var(--muted); margin: 0;
+  }
+  .scene-btn {
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--text); padding: 14px 16px; border-radius: 10px;
+    cursor: pointer; text-align: left; font-family: inherit;
+    font-size: 14px; transition: all 0.2s;
+  }
+  .scene-btn:hover { border-color: var(--accent); background: rgba(255,214,10,0.05); }
+  .scene-btn .tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em;
+    display: block; margin-bottom: 4px;
+  }
+  .action-btn {
+    padding: 12px; border: none; border-radius: 8px;
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .action-btn:hover { opacity: 0.85; }
+  .action-btn.reveal { background: var(--accent); color: #000; }
+  .action-btn.idle { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+  .action-btn.reset { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .connection {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.live { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .participants { font-size: 11px; color: var(--muted); line-height: 1.8; }
+  .participants .chip {
+    display: inline-block; padding: 2px 8px; margin: 2px;
+    background: var(--surface-2); border-radius: 4px;
+    color: var(--text); font-family: 'JetBrains Mono', monospace;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="stage">
+    <header class="stage-header">
+      <div class="brand">Audience Live · S01</div>
+      <div class="scene-meta">
+        SCENE <b id="metaScene">—</b> · TYPE <b id="metaType">—</b> · PHASE <b id="metaPhase">—</b>
+      </div>
+    </header>
+    <div class="scene-display" id="display">
+      <div class="idle-screen">
+        <h2>대기 중</h2>
+        <p>우측 패널에서 씬을 선택하세요</p>
+      </div>
+    </div>
+  </main>
+
+  <aside class="panel">
+    <div class="connection">
+      <span class="dot" id="connDot"></span>
+      <span id="connText">연결 중...</span>
+    </div>
+
+    <h3 class="panel-title">씬 라이브러리</h3>
+    <button class="scene-btn" onclick="fireScene('choice2')"><span class="tag">2지선다</span>스토리 분기</button>
+    <button class="scene-btn" onclick="fireScene('choice4')"><span class="tag">4지선다</span>전투 행동 선택</button>
+    <button class="scene-btn" onclick="fireScene('ox')"><span class="tag">OX 투표</span>찬반 결정</button>
+    <button class="scene-btn" onclick="fireScene('qte')"><span class="tag">QTE 단일 탭</span>회피 반응</button>
+    <button class="scene-btn" onclick="fireScene('qte_burst')"><span class="tag">QTE 연타</span>5초 파워 충전</button>
+    <button class="scene-btn" onclick="fireScene('text')"><span class="tag">자유 텍스트</span>한 단어 응답</button>
+
+    <h3 class="panel-title">제어</h3>
+    <button class="action-btn reveal" onclick="reveal()">결과 공개 (Reveal)</button>
+    <button class="action-btn idle" onclick="goIdle()">대기 화면으로</button>
+    <button class="action-btn reset" onclick="resetAll()">입력 데이터 초기화</button>
+
+    <h3 class="panel-title">참가자 (<span id="userCount">0</span>)</h3>
+    <div class="participants" id="participantList">—</div>
+  </aside>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+import {
+  getDatabase, ref, onValue, set, update, remove
+} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+// ════════════════════════════════════════════════════════════
+// Firebase 설정 — 본인 firebaseConfig 객체로 통째로 교체
+// ════════════════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyCl0_QKjC8LxEYNMQLNh1EJWBZom2CFXro",
+  authDomain: "gen-lang-client-0314320228.firebaseapp.com",
+  databaseURL: "https://gen-lang-client-0314320228-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "gen-lang-client-0314320228",
+  storageBucket: "gen-lang-client-0314320228.firebasestorage.app",
+  messagingSenderId: "1077038002206",
+  appId: "1:1077038002206:web:217cd7401a119e9aee7e0f"
+};
+
+// ════════════════════════════════════════════════════════════
+// 씬 정의
+// ════════════════════════════════════════════════════════════
+const SCENE_LIBRARY = {
+  choice2: {
+    type: 'choice', duration: 12000,
+    payload: {
+      prompt: '어두운 동굴에 도착했다. 어떻게 할까?',
+      options: ['🔥 횃불 켜고 들어간다', '🌿 우회로를 찾는다']
+    }
+  },
+  choice4: {
+    type: 'choice', duration: 15000,
+    payload: {
+      prompt: '괴물이 나타났다! 어떤 행동?',
+      options: ['⚔️ 정면 공격', '🛡️ 회피', '💬 협상 시도', '🏃 도망친다']
+    }
+  },
+  ox: {
+    type: 'ox', duration: 10000,
+    payload: { prompt: '이 캐릭터를 살려야 한다', options: ['O', 'X'] }
+  },
+  qte: { type: 'qte', duration: 3000, payload: { prompt: '⚡ 지금 회피!' } },
+  qte_burst: { type: 'qte_burst', duration: 5000, payload: { prompt: '💥 있는 힘껏 두드려라!' } },
+  text: { type: 'text', duration: 15000, payload: { prompt: '오늘 기분을 한 단어로?' } }
+};
+
+// ════════════════════════════════════════════════════════════
+// Firebase 초기화
+// ════════════════════════════════════════════════════════════
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const stateRef = ref(db, 'gameState');
+const usersRef = ref(db, 'users');
+const inputsRootRef = ref(db, 'inputs');
+
+let currentState = null;
+let currentInputs = {};
+let currentUsers = {};
+let serverOffset = 0;
+let timerId = null;
+let inputsUnsubscribe = null;
+
+// ════════════════════════════════════════════════════════════
+// 메타 정보 구독
+// ════════════════════════════════════════════════════════════
+onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
+  serverOffset = snap.val() || 0;
+});
+
+onValue(ref(db, '.info/connected'), (snap) => {
+  const ok = !!snap.val();
+  document.getElementById('connDot').classList.toggle('live', ok);
+  document.getElementById('connText').textContent = ok ? 'LIVE · realtime' : '연결 끊김';
+});
+
+// ════════════════════════════════════════════════════════════
+// 게임 상태 구독
+// ════════════════════════════════════════════════════════════
+onValue(stateRef, (snap) => {
+  const state = snap.val() || {
+    scene_id: '', type: 'idle', started_at: 0,
+    duration: 0, payload: null, phase: 'idle'
+  };
+
+  // 씬이 바뀌면 inputs 구독 갈아끼우기
+  if (state.scene_id !== currentState?.scene_id) {
+    currentInputs = {};
+    if (inputsUnsubscribe) inputsUnsubscribe();
+    inputsUnsubscribe = null;
+    if (state.scene_id) {
+      const sceneInputsRef = ref(db, `inputs/${state.scene_id}`);
+      inputsUnsubscribe = onValue(sceneInputsRef, (s) => {
+        currentInputs = s.val() || {};
+        render(currentState, currentInputs);
+      });
+    }
+  }
+
+  currentState = state;
+  render(state, currentInputs);
+});
+
+// 참가자 구독
+onValue(usersRef, (snap) => {
+  currentUsers = snap.val() || {};
+  const arr = Object.entries(currentUsers)
+    .map(([id, u]) => ({ id, ...u }))
+    .sort((a, b) => (b.joined_at || 0) - (a.joined_at || 0));
+  document.getElementById('userCount').textContent = arr.length;
+  document.getElementById('participantList').innerHTML = arr.length
+    ? arr.map(u => `<span class="chip">${escapeHtml(u.nickname)}</span>`).join('')
+    : '<span style="color:var(--muted)">아직 참가자가 없어요</span>';
+});
+
+// ════════════════════════════════════════════════════════════
+// 씬 제어 (window 에 노출 — onclick 인라인 핸들러용)
+// ════════════════════════════════════════════════════════════
+window.fireScene = function(key) {
+  const def = SCENE_LIBRARY[key];
+  if (!def) return;
+  set(stateRef, {
+    scene_id: `s_${key}_${Date.now()}`,
+    type: def.type,
+    started_at: Date.now(),
+    duration: def.duration,
+    payload: def.payload,
+    phase: 'collecting',
+    updated_at: Date.now()
+  });
+};
+
+window.reveal = function() {
+  if (!currentState?.scene_id) return;
+  update(stateRef, { phase: 'reveal', updated_at: Date.now() });
+};
+
+window.goIdle = function() {
+  set(stateRef, {
+    scene_id: '', type: 'idle', started_at: 0,
+    duration: 0, payload: null, phase: 'idle',
+    updated_at: Date.now()
+  });
+};
+
+window.resetAll = function() {
+  if (!confirm('모든 입력 데이터 삭제할까요?\n(참가자 목록은 유지됨)')) return;
+  remove(inputsRootRef);
+};
+
+// ════════════════════════════════════════════════════════════
+// 렌더링
+// ════════════════════════════════════════════════════════════
+function render(state, inputs) {
+  if (!state) return;
+  document.getElementById('metaScene').textContent = state.scene_id || '—';
+  document.getElementById('metaType').textContent = state.type || '—';
+  document.getElementById('metaPhase').textContent = state.phase || '—';
+
+  const display = document.getElementById('display');
+
+  if (!state.scene_id || state.phase === 'idle' || state.type === 'idle') {
+    display.innerHTML = `<div class="idle-screen">
+      <h2>대기 중</h2><p>우측 패널에서 씬을 선택하세요</p>
+    </div>`;
+    stopTimer();
+    return;
+  }
+
+  const payload = state.payload || {};
+  const showResults = state.phase === 'reveal';
+  const inputCount = Object.keys(inputs).length;
+  const tally = aggregateInputs(state.type, inputs);
+
+  let body = `<div class="prompt">${escapeHtml(payload.prompt || '')}</div>`;
+
+  if (!showResults && state.duration > 0) {
+    const remaining = Math.max(0, state.started_at + state.duration - serverNow());
+    body += `<div class="timer ${remaining < 3000 ? 'warning' : ''}">${(remaining/1000).toFixed(1)}s</div>`;
+  } else if (showResults) {
+    body += `<div class="status-line">결과 공개</div>`;
+  } else {
+    body += `<div class="status-line">입력 수집 중 · ${inputCount}명 참여</div>`;
+  }
+
+  if (state.type === 'choice') body += renderBars(payload.options || [], tally, showResults);
+  else if (state.type === 'ox') body += renderOX(tally);
+  else if (state.type === 'qte') body += renderQTE(inputCount);
+  else if (state.type === 'qte_burst') body += renderBurstBoard(tally);
+  else if (state.type === 'text') body += renderWords(tally);
+
+  display.innerHTML = body;
+  ensureTimer();
+}
+
+function renderBars(options, tally, showResults) {
+  const max = Math.max(1, ...Object.values(tally));
+  const winnerKey = showResults
+    ? Object.entries(tally).sort((a,b)=>b[1]-a[1])[0]?.[0] : null;
+  return `<div class="results">${
+    options.map(opt => {
+      const count = tally[opt] || 0;
+      const pct = (count / max) * 100;
+      const isWinner = opt === winnerKey && count > 0;
+      return `<div class="bar-row ${isWinner ? 'winner' : ''}">
+        <div class="bar-label">${escapeHtml(opt)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <div class="bar-count">${count}</div>
+      </div>`;
+    }).join('')
+  }</div>`;
+}
+
+function renderOX(tally) {
+  return `<div class="ox-grid">
+    <div class="ox-card O"><div class="ox-symbol">O</div><div class="ox-count">${tally['O'] || 0}</div></div>
+    <div class="ox-card X"><div class="ox-symbol">X</div><div class="ox-count">${tally['X'] || 0}</div></div>
+  </div>`;
+}
+
+function renderQTE(count) {
+  const total = Object.keys(currentUsers).length || 1;
+  const pct = Math.round((count / total) * 100);
+  return `<div class="qte-stats">
+    <div class="stat-card"><div class="stat-label">반응 인원</div><div class="stat-value">${count}</div></div>
+    <div class="stat-card"><div class="stat-label">전체</div><div class="stat-value">${total}</div></div>
+    <div class="stat-card"><div class="stat-label">반응률</div><div class="stat-value">${pct}%</div></div>
+  </div>`;
+}
+
+function renderBurstBoard(tally) {
+  const rows = Object.entries(tally).sort((a,b) => b[1] - a[1]).slice(0, 10);
+  if (!rows.length) return `<div class="status-line">아직 입력 없음</div>`;
+  return `<div class="leaderboard">${
+    rows.map(([name, count], i) => {
+      const cls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
+      return `<div class="lb-row ${cls}">
+        <div class="lb-rank">#${i+1}</div>
+        <div class="lb-name">${escapeHtml(name)}</div>
+        <div class="lb-count">${count}</div>
+      </div>`;
+    }).join('')
+  }</div>`;
+}
+
+function renderWords(tally) {
+  const words = Object.entries(tally).sort((a,b) => b[1] - a[1]);
+  if (!words.length) return `<div class="status-line">응답 대기 중</div>`;
+  return `<div class="word-cloud">${
+    words.map(([w, c]) => {
+      const size = 16 + Math.min(c, 5) * 6;
+      return `<div class="word-bubble" style="font-size:${size}px">
+        ${escapeHtml(w)} ${c > 1 ? `<span style="color:var(--accent)">×${c}</span>` : ''}
+      </div>`;
+    }).join('')
+  }</div>`;
+}
+
+function aggregateInputs(type, inputs) {
+  const t = {};
+  for (const userId in inputs) {
+    const i = inputs[userId];
+    if (!i) continue;
+    if (type === 'choice' || type === 'ox') {
+      const k = i.input?.choice;
+      if (k) t[k] = (t[k] || 0) + 1;
+    } else if (type === 'qte_burst') {
+      t[i.nickname] = i.input?.count || 0;
+    } else if (type === 'text') {
+      const w = (i.input?.text || '').trim();
+      if (w) t[w] = (t[w] || 0) + 1;
+    }
+  }
+  return t;
+}
+
+function ensureTimer() { if (!timerId) timerId = requestAnimationFrame(tickTimer); }
+function stopTimer() { if (timerId) { cancelAnimationFrame(timerId); timerId = null; } }
+function tickTimer() {
+  if (!currentState || currentState.phase === 'reveal' || !currentState.duration) {
+    timerId = null; return;
+  }
+  const remaining = Math.max(0, currentState.started_at + currentState.duration - serverNow());
+  const el = document.querySelector('.timer');
+  if (el) {
+    el.textContent = (remaining/1000).toFixed(1) + 's';
+    if (remaining < 3000) el.classList.add('warning'); else el.classList.remove('warning');
+  }
+  timerId = requestAnimationFrame(tickTimer);
+}
+function serverNow() { return Date.now() + serverOffset; }
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+</script>
+</body>
+</html>
