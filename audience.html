@@ -620,6 +620,9 @@ function renderScene(state) {
     burstCount = 0;
     if (burstAutoSubmitId) clearTimeout(burstAutoSubmitId);
     burstAutoSubmitId = setTimeout(() => {
+      // 예약된 throttled write 가 final submit 뒤에 도착해서 덮어쓰지 않도록 취소
+      if (burstWriteTimer) { clearTimeout(burstWriteTimer); burstWriteTimer = null; }
+      burstWritePending = false;
       if (!submitted && burstCount > 0) {
         submitInput({ count: burstCount }, `${burstCount} taps`);
       } else if (!submitted) {
@@ -698,8 +701,33 @@ function submitText() {
   if (!v) return;
   submitInput({ text: v }, v);
 }
+
+// burst 의 매 탭마다 Firebase 에 즉시 동기화 (80ms throttle)
+// → 메인 화면 카운터가 실시간으로 차오름
+let burstWriteTimer = null;
+let burstWritePending = false;
+function scheduleBurstWrite() {
+  burstWritePending = true;
+  if (burstWriteTimer) return;
+  burstWriteTimer = setTimeout(() => {
+    burstWriteTimer = null;
+    if (!burstWritePending) return;
+    burstWritePending = false;
+    if (!currentSceneId || !user || submitted) return;
+    set(ref(db, `inputs/${currentSceneId}/${user.user_id}`), {
+      timestamp: Date.now(),
+      nickname: user.nickname,
+      input: { count: burstCount }
+    }).catch(err => console.warn('burst write failed', err));
+  }, 80);
+}
+
 function tickBurst() {
   if (submitted) return;
+  // 1인당 한도 (payload.tap_target_per_user) 도달 시 더 안 셈
+  const cap = currentState?.payload?.tap_target_per_user;
+  if (cap && burstCount >= cap) return;
+
   burstCount++;
   const el = document.getElementById('burstCount');
   if (el) {
@@ -707,6 +735,17 @@ function tickBurst() {
     el.style.transform = 'scale(1.1)';
     requestAnimationFrame(() => el.style.transform = 'scale(1)');
   }
+  // 한도에 도달했으면 버튼 비활성화
+  if (cap && burstCount >= cap) {
+    const btn = document.getElementById('burstBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      btn.textContent = `한도 도달 (${cap})`;
+    }
+  }
+  // Firebase 에 throttled write → 메인 카운터가 실시간 반영
+  scheduleBurstWrite();
 }
 
 // ════════════════════════════════════════════════════════════
