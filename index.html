@@ -272,6 +272,64 @@
     transform: translateY(100%); transition: transform 0.3s;
   }
   .conn-bar.show { transform: translateY(0); }
+
+  /* ─── s05_map_game · 지도 정렬 미니게임 ─── */
+  .map-hint {
+    text-align: center; color: var(--muted); font-size: 13px;
+    margin: 4px 0 12px; font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em; transition: color 0.2s;
+  }
+  .map-hint.near { color: var(--accent); }
+  .map-hint.aligned { color: var(--success); font-weight: 700; }
+  .map-stage {
+    position: relative; width: 100%; aspect-ratio: 1260 / 832;
+    margin: 0 auto; background: #000;
+    border-radius: 12px; border: 1px solid var(--line);
+    overflow: hidden; touch-action: none; user-select: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .map-base {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none; -webkit-user-drag: none; user-select: none;
+  }
+  .map-omap {
+    position: absolute;
+    width: 100%; height: 100%;
+    /* JS sets left/top as % · transform centers the image on that point */
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    cursor: grab;
+    touch-action: none;
+    -webkit-user-drag: none; user-select: none;
+    mix-blend-mode: screen;
+    opacity: 0.95;
+    filter: brightness(1.6) contrast(1.4) saturate(1.3);
+    transition: filter 0.2s ease;
+    will-change: left, top;
+  }
+  .map-omap.dragging { cursor: grabbing; filter: brightness(1.8) contrast(1.5) saturate(1.4); }
+  .map-omap.near     { filter: brightness(2.0) contrast(1.6) saturate(1.5); }
+  .map-omap.aligned  {
+    filter: brightness(2.4) contrast(1.7) saturate(1.6)
+            drop-shadow(0 0 12px rgba(0,214,143,0.7));
+    transition: filter 0.5s ease, left 0.35s ease, top 0.35s ease;
+  }
+  .map-success {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    background: rgba(0,214,143,0.95); color: #000;
+    padding: 14px 28px; border-radius: 999px;
+    font-weight: 800; font-size: 18px; letter-spacing: -0.01em;
+    opacity: 0; pointer-events: none; z-index: 10;
+    transition: opacity 0.3s ease, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 8px 24px rgba(0,214,143,0.4);
+  }
+  .map-success.show {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
 </style>
 </head>
 <body>
@@ -488,6 +546,21 @@ function renderRevealResults(state, inputs) {
           }).join('')
         }</div>`
       : '<div style="color:var(--muted);font-size:13px">응답 없음</div>';
+  } else if (type === 'map_align') {
+    // 정렬 성공한 인원 집계
+    const aligned = Object.values(inputs).filter(i => i?.input?.aligned).length;
+    const total   = totalSubmissions;
+    const myOk    = !!myInput?.input?.aligned;
+    resultsHtml = `
+      <div class="qte-result">
+        <div class="qte-result-row">
+          <span>지도 완성한 사람</span>
+          <b>${aligned}명</b>
+        </div>
+        <div class="qte-result-mine ${myOk ? 'success' : 'fail'}">
+          ${myOk ? '🎉 당신은 지도를 완성했어요!' : '😢 시간 안에 못 맞췄어요'}
+        </div>
+      </div>`;
   }
 
   document.getElementById('body').innerHTML = `
@@ -507,6 +580,7 @@ function formatMyAnswer(myInput) {
   if (p.choice) return p.choice;
   if (p.text) return p.text;
   if (p.count != null) return `${p.count} taps`;
+  if (p.aligned) return '✓ 지도 완성';
   if (p.tapped_at) return '✓ 반응';
   return null;
 }
@@ -532,6 +606,13 @@ function aggregateInputs(type, inputs) {
 function renderScene(state) {
   const p = state.payload || {};
   const type = state.type;
+
+  // map_align 은 전용 렌더러 호출 후 종료 — 일반 input UI 와 분기 다름
+  if (type === 'map_align') {
+    renderMapAlignGame(state);
+    return;
+  }
+
   const timerHtml = state.duration > 0
     ? `<div class="timer-pill" id="timer">⏱ <b>--</b>초 남음</div>` : '';
 
@@ -631,6 +712,170 @@ function renderScene(state) {
       }
     }, Math.max(0, remaining));
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// s05_map_game — 지도 정렬 미니게임
+// ════════════════════════════════════════════════════════════
+function renderMapAlignGame(state) {
+  const p = state.payload || {};
+  const cfg = {
+    mapSrc:   p.map_src    || 'map.png',
+    omapSrc:  p.omap_src   || 'omap.png',
+    targetX:  p.target_x_pct  ?? 50,
+    targetY:  p.target_y_pct  ?? 50,
+    tol:      p.tolerance_pct ?? 4,
+    startDx:  p.start_dx_pct  ?? 22,
+    startDy:  p.start_dy_pct  ?? -14,
+  };
+
+  const timerHtml = state.duration > 0
+    ? `<div class="timer-pill" id="timer">⏱ <b>--</b>초 남음</div>` : '';
+
+  document.getElementById('body').innerHTML = `
+    <div class="scene">
+      <div class="scene-prompt">${escapeHtml(p.prompt || '')}</div>
+      ${timerHtml}
+      <div class="map-hint" id="mapHint">👆 빨간 지도를 드래그해서 정확히 겹쳐보세요</div>
+      <div class="map-stage" id="mapStage">
+        <img class="map-base" id="mapBase" src="${escapeHtml(cfg.mapSrc)}" alt="map" draggable="false">
+        <img class="map-omap" id="mapOmap" src="${escapeHtml(cfg.omapSrc)}" alt="overlay" draggable="false">
+        <div class="map-success" id="mapSuccess">✓ 완벽한 정렬!</div>
+      </div>
+    </div>
+  `;
+
+  initMapAlignDrag(cfg);
+  startTimerLoop(state);
+}
+
+function initMapAlignDrag(cfg) {
+  const stage    = document.getElementById('mapStage');
+  const omap     = document.getElementById('mapOmap');
+  const hintEl   = document.getElementById('mapHint');
+  const okEl     = document.getElementById('mapSuccess');
+
+  // omap 의 중심점을 (targetX + startDx, targetY + startDy) 로 시작
+  let posX = cfg.targetX + cfg.startDx;
+  let posY = cfg.targetY + cfg.startDy;
+  let aligned = false;
+
+  function applyPos() {
+    omap.style.left = posX + '%';
+    omap.style.top  = posY + '%';
+  }
+  applyPos();
+
+  function distance() {
+    const dx = posX - cfg.targetX;
+    const dy = posY - cfg.targetY;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+
+  function updateHint() {
+    if (aligned) return;
+    const d = distance();
+    if (d <= cfg.tol) {
+      omap.classList.add('near');
+      hintEl.textContent = '거의 다 됐어요! 손 떼면 확정';
+      hintEl.classList.add('near');
+    } else if (d <= cfg.tol * 2.5) {
+      omap.classList.add('near');
+      hintEl.textContent = '🔥 거의 다 왔어요...';
+      hintEl.classList.add('near');
+    } else {
+      omap.classList.remove('near');
+      hintEl.textContent = '👆 빨간 지도를 드래그해서 정확히 겹쳐보세요';
+      hintEl.classList.remove('near');
+    }
+  }
+
+  function onAligned() {
+    if (aligned || submitted || !currentSceneId || !user) return;
+    aligned = true;
+    submitted = true;
+
+    // 완전 정답 위치로 살짝 스냅 (시각적 만족감)
+    posX = cfg.targetX;
+    posY = cfg.targetY;
+    applyPos();
+
+    omap.classList.remove('near');
+    omap.classList.add('aligned');
+    hintEl.textContent = '🎉 지도 완성!';
+    hintEl.classList.remove('near');
+    hintEl.classList.add('aligned');
+    okEl.classList.add('show');
+
+    detach();
+
+    // Firebase 에 결과 기록 (UI 는 그대로 — renderSubmitted 호출 안 함)
+    set(ref(db, `inputs/${currentSceneId}/${user.user_id}`), {
+      timestamp: Date.now(),
+      nickname: user.nickname,
+      input: { aligned: true, took_ms: Date.now() - (currentState?.started_at || Date.now()) }
+    }).catch(err => console.warn('map_align submit failed', err));
+  }
+
+  // ── 드래그 핸들링 (mouse + touch 통합) ──
+  let dragging = false;
+  let startCX = 0, startCY = 0;
+  let startPX = 0, startPY = 0;
+  let rect = null;
+
+  function pt(e) {
+    if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    return { x: e.clientX, y: e.clientY };
+  }
+
+  function onDown(e) {
+    if (aligned || submitted) return;
+    e.preventDefault();
+    dragging = true;
+    rect = stage.getBoundingClientRect();
+    const q = pt(e);
+    startCX = q.x; startCY = q.y;
+    startPX = posX; startPY = posY;
+    omap.classList.add('dragging');
+  }
+
+  function onMove(e) {
+    if (!dragging || !rect) return;
+    e.preventDefault();
+    const q = pt(e);
+    const dxPct = ((q.x - startCX) / rect.width)  * 100;
+    const dyPct = ((q.y - startCY) / rect.height) * 100;
+    // 화면 밖으로 너무 멀리 나가지 않도록 살짝 클램프
+    posX = Math.max(-30, Math.min(130, startPX + dxPct));
+    posY = Math.max(-30, Math.min(130, startPY + dyPct));
+    applyPos();
+    updateHint();
+  }
+
+  function onUp() {
+    if (!dragging) return;
+    dragging = false;
+    omap.classList.remove('dragging');
+    if (distance() <= cfg.tol) onAligned();
+  }
+
+  function detach() {
+    omap.removeEventListener('mousedown',  onDown);
+    omap.removeEventListener('touchstart', onDown);
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('touchmove', onMove);
+    window.removeEventListener('mouseup',   onUp);
+    window.removeEventListener('touchend',  onUp);
+    window.removeEventListener('touchcancel', onUp);
+  }
+
+  omap.addEventListener('mousedown',  onDown);
+  omap.addEventListener('touchstart', onDown, { passive: false });
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('mouseup',   onUp);
+  window.addEventListener('touchend',  onUp);
+  window.addEventListener('touchcancel', onUp);
 }
 
 function renderSubmitted(answerLabel) {
