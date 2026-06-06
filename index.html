@@ -386,12 +386,18 @@
     50%  { transform: scale(1.12); }
     100% { transform: scale(1); }
   }
+  .m3-hint {
+    text-align: center; color: var(--muted); font-size: 12px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.01em;
+    line-height: 1.5; padding: 0 4px;
+  }
+  .m3-hint b { color: var(--accent); font-weight: 700; }
   .m3-grid {
     display: grid; gap: 4px;
     background: var(--surface-2); padding: 6px; border-radius: 12px;
     border: 1px solid var(--line);
     user-select: none; -webkit-user-select: none;
-    touch-action: manipulation;
+    touch-action: none;        /* 브라우저 스크롤/줌 방지 — 스와이프가 게임 제스처로만 작동 */
   }
   .m3-cell {
     aspect-ratio: 1;
@@ -428,6 +434,10 @@
   .m3-banner.show {
     transform: translate(-50%, -50%) scale(1);
     opacity: 1;
+  }
+  .m3-banner-info {
+    background: rgba(255,214,10,0.95); color: #0a0a0f;
+    box-shadow: 0 12px 32px rgba(255,214,10,0.45);
   }
 </style>
 </head>
@@ -1121,9 +1131,11 @@ function renderMatch3Game(state) {
       <div class="scene-prompt">${escapeHtml(p.prompt || '')}</div>
       ${timerHtml}
       <div class="m3-progress" id="m3Progress">선착순 ${cfg.winnersNeeded}명 도전 · <b id="m3ProgressN">0</b> / ${cfg.winnersNeeded}</div>
+      <div class="m3-hint">↔️ 인접한 두 타일을 <b>스와이프</b> 또는 <b>두 번 탭</b>해서 같은 이모지 3개 일렬로!</div>
       <div class="m3-checklist">${checklistHtml}</div>
       <div class="m3-grid" id="m3Grid" style="grid-template-columns: repeat(${cfg.cols}, 1fr);"></div>
       <div class="m3-banner" id="m3Banner">🎉 위험요소 모두 제거 완료!</div>
+      <div class="m3-banner m3-banner-info" id="m3Reshuffle">🔀 보드 섞는 중...</div>
     </div>
   `;
 
@@ -1144,10 +1156,7 @@ function renderMatch3Game(state) {
       }
     }
     gridEl.innerHTML = html;
-    gridEl.querySelectorAll('.m3-cell').forEach(el => {
-      el.onclick = () => onTap(+el.dataset.r, +el.dataset.c);
-    });
-    // 선택된 셀 표시 복원
+    // 선택된 셀 표시 복원 (이벤트 핸들러는 그리드 레벨에 한 번만 — paint 마다 재바인딩 안 함)
     if (selected) {
       const sel = gridEl.querySelector(`.m3-cell[data-r="${selected.r}"][data-c="${selected.c}"]`);
       if (sel) sel.classList.add('selected');
@@ -1233,7 +1242,25 @@ function renderMatch3Game(state) {
       onWin();
     }
 
+    // 보드가 막혔는지 체크 — 한 수도 둘 수 없으면 셔플
+    if (!won && !hasPossibleMove(grid, cfg)) {
+      showReshuffleBanner();
+      await m3Sleep(700);
+      reshuffleBoard(grid, cfg);
+      paint();
+      hideReshuffleBanner();
+    }
+
     busy = false;
+  }
+
+  function showReshuffleBanner() {
+    const b = document.getElementById('m3Reshuffle');
+    if (b) b.classList.add('show');
+  }
+  function hideReshuffleBanner() {
+    const b = document.getElementById('m3Reshuffle');
+    if (b) b.classList.remove('show');
   }
 
   function onWin() {
@@ -1255,6 +1282,70 @@ function renderMatch3Game(state) {
   refreshChecklist();
   startTimerLoop(state);
   updateMatch3Progress();   // 입장 시점 카운터 한 번 그리기
+
+  // ── 제스처 핸들러 (탭 + 스와이프) ─────────────────────────
+  // - 인접 셀로 짧게 드래그하면 스와이프로 swap (캔디크러쉬 스타일)
+  // - 짧게 탭하면 첫 셀 선택, 다른 인접 셀 탭하면 swap (탭-탭 백업)
+  // - 그리드 레벨에 단 한 번 바인딩 → paint() 가 셀을 교체해도 계속 작동
+  const gridEl = document.getElementById('m3Grid');
+  let dragStart = null;
+  const SWIPE_THRESHOLD = 16;  // 픽셀 — 이 이상 움직이면 스와이프로 인정
+
+  gridEl.addEventListener('pointerdown', (e) => {
+    if (busy || won) return;
+    const el = e.target.closest('.m3-cell');
+    if (!el) return;
+    try { gridEl.setPointerCapture(e.pointerId); } catch {}
+    dragStart = {
+      r: +el.dataset.r,
+      c: +el.dataset.c,
+      x: e.clientX,
+      y: e.clientY,
+      pointerId: e.pointerId,
+      swiped: false
+    };
+  });
+
+  gridEl.addEventListener('pointermove', (e) => {
+    if (!dragStart || dragStart.swiped) return;
+    if (e.pointerId !== dragStart.pointerId) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD) return;
+
+    // 방향 결정 (수평/수직 중 큰 쪽)
+    let dr = 0, dc = 0;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      dc = dx > 0 ? 1 : -1;
+    } else {
+      dr = dy > 0 ? 1 : -1;
+    }
+    const r2 = dragStart.r + dr;
+    const c2 = dragStart.c + dc;
+    if (r2 < 0 || r2 >= cfg.rows || c2 < 0 || c2 >= cfg.cols) return;
+
+    dragStart.swiped = true;
+    setSelected(null);
+    trySwap(dragStart.r, dragStart.c, r2, c2);
+    e.preventDefault();
+  });
+
+  gridEl.addEventListener('pointerup', (e) => {
+    if (!dragStart) return;
+    if (e.pointerId !== dragStart.pointerId) { dragStart = null; return; }
+    if (!dragStart.swiped) {
+      // 움직임 거의 없었으면 탭으로 처리
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const cell = el?.closest('.m3-cell');
+      if (cell && +cell.dataset.r === dragStart.r && +cell.dataset.c === dragStart.c) {
+        onTap(dragStart.r, dragStart.c);
+      }
+    }
+    dragStart = null;
+    try { gridEl.releasePointerCapture(e.pointerId); } catch {}
+  });
+
+  gridEl.addEventListener('pointercancel', () => { dragStart = null; });
 }
 
 // ── match-3 보조 함수들 (순수 로직) ─────────────────────────
@@ -1265,14 +1356,65 @@ function swapTiles(grid, r1, c1, r2, c2) {
 }
 
 function makeInitialGrid(cfg) {
-  const grid = [];
+  // 최대 20번 시도 — 한 수도 둘 수 없는 보드면 다시 만든다
+  let grid;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    grid = [];
+    for (let r = 0; r < cfg.rows; r++) {
+      grid.push(new Array(cfg.cols).fill(null));
+      for (let c = 0; c < cfg.cols; c++) {
+        grid[r][c] = pickInitialTile(grid, r, c, cfg);
+      }
+    }
+    if (hasPossibleMove(grid, cfg)) return grid;
+  }
+  return grid;  // 폴백 (사실상 도달 안 함)
+}
+
+// 인접한 두 타일을 바꿔서 매치를 만들 수 있는 swap 이 보드에 하나라도 있는가?
+// (모든 인접 쌍을 한 번씩 가상으로 swap 해보고 매치 발생 여부 확인 — O(rows*cols) cheap)
+function hasPossibleMove(grid, cfg) {
   for (let r = 0; r < cfg.rows; r++) {
-    grid.push(new Array(cfg.cols).fill(null));
     for (let c = 0; c < cfg.cols; c++) {
-      grid[r][c] = pickInitialTile(grid, r, c, cfg);
+      // 오른쪽 인접 swap 시뮬레이션
+      if (c + 1 < cfg.cols) {
+        swapTiles(grid, r, c, r, c + 1);
+        const ok = findMatches(grid).length > 0;
+        swapTiles(grid, r, c, r, c + 1);   // 복구
+        if (ok) return true;
+      }
+      // 아래 인접 swap 시뮬레이션
+      if (r + 1 < cfg.rows) {
+        swapTiles(grid, r, c, r + 1, c);
+        const ok = findMatches(grid).length > 0;
+        swapTiles(grid, r, c, r + 1, c);   // 복구
+        if (ok) return true;
+      }
     }
   }
-  return grid;
+  return false;
+}
+
+// 보드가 막혔을 때 (둘 수 있는 수가 없을 때) 타일 재배치
+// Fisher-Yates 셔플로 자리만 섞고, 매치/플레이 가능 보드가 될 때까지 반복
+function reshuffleBoard(grid, cfg) {
+  const tiles = [];
+  for (let r = 0; r < cfg.rows; r++) for (let c = 0; c < cfg.cols; c++) tiles.push(grid[r][c]);
+
+  for (let attempt = 0; attempt < 30; attempt++) {
+    // Fisher-Yates
+    for (let i = tiles.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+    }
+    let idx = 0;
+    for (let r = 0; r < cfg.rows; r++) for (let c = 0; c < cfg.cols; c++) grid[r][c] = tiles[idx++];
+    // 초기 매치 없고 + 둘 수 있는 수가 있으면 OK
+    if (findMatches(grid).length === 0 && hasPossibleMove(grid, cfg)) return;
+  }
+  // 최후의 수단 — 완전 새로 생성
+  const fresh = makeInitialGrid(cfg);
+  for (let r = 0; r < cfg.rows; r++) for (let c = 0; c < cfg.cols; c++) grid[r][c] = fresh[r][c];
 }
 
 function pickInitialTile(grid, r, c, cfg) {
