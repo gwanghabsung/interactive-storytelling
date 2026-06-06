@@ -281,6 +281,19 @@
   }
   .map-hint.near { color: var(--accent); }
   .map-hint.aligned { color: var(--success); font-weight: 700; }
+  .map-progress {
+    align-self: center;
+    padding: 6px 14px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--muted); font-size: 12px; font-weight: 600;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
+    margin: 0 0 8px; transition: all 0.3s;
+  }
+  .map-progress b { color: var(--accent); font-weight: 800; font-size: 14px; }
+  .map-progress.full {
+    background: rgba(0,214,143,0.15); border-color: var(--success); color: var(--success);
+  }
+  .map-progress.full b { color: var(--success); }
   .map-stage {
     position: relative; width: 100%; aspect-ratio: 1260 / 832;
     margin: 0 auto; background: #000;
@@ -327,6 +340,92 @@
     box-shadow: 0 8px 24px rgba(0,214,143,0.4);
   }
   .map-success.show {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  /* ─── s08_2_hidden · 매치-3 미니게임 ─── */
+  .m3-stage {
+    position: relative;
+    display: flex; flex-direction: column; gap: 10px;
+    flex: 1;
+  }
+  .m3-progress {
+    align-self: center; padding: 6px 14px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--muted); font-size: 12px; font-weight: 600;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
+    transition: all 0.3s;
+  }
+  .m3-progress b { color: var(--accent); font-weight: 800; font-size: 14px; }
+  .m3-progress.full { background: rgba(0,214,143,0.15); border-color: var(--success); color: var(--success); }
+  .m3-progress.full b { color: var(--success); }
+  .m3-checklist {
+    display: flex; gap: 6px; justify-content: center;
+  }
+  .m3-danger {
+    flex: 1; padding: 8px 4px;
+    border: 2px solid var(--line); border-radius: 10px;
+    background: var(--surface-2);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    font-size: 20px; transition: all 0.3s;
+  }
+  .m3-danger.cleared {
+    border-color: var(--success);
+    background: rgba(0,214,143,0.12);
+    animation: m3Pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .m3-danger::after {
+    content: '·'; color: var(--muted); font-size: 14px; opacity: 0.4;
+  }
+  .m3-danger.cleared::after {
+    content: '✓'; color: var(--success); font-size: 16px; font-weight: 800; opacity: 1;
+  }
+  @keyframes m3Pop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.12); }
+    100% { transform: scale(1); }
+  }
+  .m3-grid {
+    display: grid; gap: 4px;
+    background: var(--surface-2); padding: 6px; border-radius: 12px;
+    border: 1px solid var(--line);
+    user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  .m3-cell {
+    aspect-ratio: 1;
+    display: flex; align-items: center; justify-content: center;
+    font-size: clamp(24px, 7vw, 32px);
+    background: var(--surface); border-radius: 6px;
+    cursor: pointer; transition: transform 0.15s, background 0.15s, border-color 0.15s, opacity 0.2s;
+    border: 2px solid transparent;
+    -webkit-touch-callout: none;
+  }
+  .m3-cell.selected {
+    border-color: var(--accent);
+    background: rgba(255,214,10,0.18);
+    transform: scale(1.06);
+    box-shadow: 0 4px 12px rgba(255,214,10,0.3);
+  }
+  .m3-cell.matching {
+    background: rgba(0,214,143,0.4);
+    transform: scale(0.65);
+    opacity: 0.2;
+  }
+  .m3-cell.locked { pointer-events: none; opacity: 0.55; }
+  .m3-banner {
+    position: absolute; top: 45%; left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    background: rgba(0,214,143,0.95); color: #000;
+    padding: 16px 28px; border-radius: 999px;
+    font-weight: 800; font-size: 18px; letter-spacing: -0.01em;
+    opacity: 0; pointer-events: none; z-index: 10;
+    transition: opacity 0.3s, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 12px 32px rgba(0,214,143,0.5);
+    white-space: nowrap;
+  }
+  .m3-banner.show {
     transform: translate(-50%, -50%) scale(1);
     opacity: 1;
   }
@@ -546,21 +645,99 @@ function renderRevealResults(state, inputs) {
           }).join('')
         }</div>`
       : '<div style="color:var(--muted);font-size:13px">응답 없음</div>';
-  } else if (type === 'map_align') {
-    // 정렬 성공한 인원 집계
-    const aligned = Object.values(inputs).filter(i => i?.input?.aligned).length;
-    const total   = totalSubmissions;
-    const myOk    = !!myInput?.input?.aligned;
+  } else if (type === 'map_align' || type === 'match3') {
+    const isMatch3 = type === 'match3';
+    const successKey = isMatch3 ? 'eliminated' : 'aligned';
+    const missionLabel = isMatch3 ? '위험 요소 제거' : '지도 완성';
+    const needed = p.winners_needed ?? 3;
+    // 성공자만 took_ms 순으로 정렬 (없으면 timestamp 폴백)
+    const ranked = Object.entries(inputs)
+      .map(([uid, i]) => ({ uid, ...i }))
+      .filter(i => i?.input?.[successKey])
+      .sort((a, b) => {
+        const at = a.input?.took_ms ?? a.timestamp ?? 0;
+        const bt = b.input?.took_ms ?? b.timestamp ?? 0;
+        return at - bt;
+      });
+    const winners = ranked.slice(0, needed);
+
+    // 내 순위 (전체 ranked 기준)
+    const myRank = user ? ranked.findIndex(r => r.uid === user.user_id) : -1;
+    const myInTop = myRank >= 0 && myRank < needed;
+    const myDone = !!myInput?.input?.[successKey];
+
+    const rankEmoji = ['🥇','🥈','🥉','4','5','6','7'];
+    const slotsHtml = Array.from({ length: needed }, (_, idx) => {
+      const w = winners[idx];
+      const rank = rankEmoji[idx] || `${idx + 1}`;
+      if (w) {
+        const secs = (w.input?.took_ms != null) ? (w.input.took_ms / 1000).toFixed(1) + 's' : '';
+        const isMine = user && w.uid === user.user_id;
+        return `
+          <div class="ma-slot-m ma-slot-m-filled ${isMine ? 'ma-slot-m-mine' : ''}">
+            <span class="ma-slot-m-rank">${rank}</span>
+            <span class="ma-slot-m-name">${escapeHtml(w.nickname || '익명')}${isMine ? ' (나)' : ''}</span>
+            <span class="ma-slot-m-time">${secs}</span>
+          </div>`;
+      }
+      return `
+        <div class="ma-slot-m ma-slot-m-empty">
+          <span class="ma-slot-m-rank">${rank}</span>
+          <span class="ma-slot-m-name">미완성</span>
+          <span class="ma-slot-m-time">—</span>
+        </div>`;
+    }).join('');
+
+    const myStatusHtml = myInTop
+      ? `<div class="ma-me ma-me-ok">🎉 ${myRank + 1}등으로 ${missionLabel}! 미션 성공에 기여했어요</div>`
+      : myDone
+        ? `<div class="ma-me ma-me-late">✓ 완성했지만 선착순 ${needed}명 안엔 못 들었어요 (${myRank + 1}등)</div>`
+        : `<div class="ma-me ma-me-fail">😢 이번엔 시간 안에 못 끝냈어요</div>`;
+
     resultsHtml = `
-      <div class="qte-result">
-        <div class="qte-result-row">
-          <span>지도 완성한 사람</span>
-          <b>${aligned}명</b>
-        </div>
-        <div class="qte-result-mine ${myOk ? 'success' : 'fail'}">
-          ${myOk ? '🎉 당신은 지도를 완성했어요!' : '😢 시간 안에 못 맞췄어요'}
-        </div>
-      </div>`;
+      <style>
+        .ma-slots-m { display: flex; flex-direction: column; gap: 10px; }
+        .ma-slot-m {
+          display: flex; align-items: center; gap: 12px;
+          padding: 14px 16px; border-radius: 12px;
+          border: 1px solid var(--line); background: var(--surface);
+        }
+        .ma-slot-m-rank {
+          font-size: 24px; font-weight: 800;
+          width: 36px; text-align: center; flex-shrink: 0;
+        }
+        .ma-slot-m-name {
+          flex: 1; font-size: 17px; font-weight: 700;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .ma-slot-m-time {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 13px; color: var(--muted); flex-shrink: 0;
+        }
+        .ma-slot-m-empty { opacity: 0.45; }
+        .ma-slot-m-empty .ma-slot-m-name { color: var(--muted); font-weight: 400; }
+        .ma-slot-m-filled {
+          border-color: var(--accent);
+          background: linear-gradient(180deg, rgba(255,214,10,0.10), rgba(255,214,10,0.02));
+        }
+        .ma-slot-m-filled .ma-slot-m-time { color: var(--accent); font-weight: 700; }
+        .ma-slot-m-mine {
+          border-color: var(--success);
+          background: linear-gradient(180deg, rgba(0,214,143,0.16), rgba(0,214,143,0.04));
+          box-shadow: 0 4px 16px rgba(0,214,143,0.2);
+        }
+        .ma-me {
+          margin-top: 14px; padding: 14px 16px;
+          border-radius: 12px; font-weight: 700; font-size: 15px;
+          text-align: center; line-height: 1.4;
+        }
+        .ma-me-ok   { background: rgba(0,214,143,0.15); color: var(--success); border: 1px solid var(--success); }
+        .ma-me-late { background: rgba(255,214,10,0.10); color: var(--accent);  border: 1px solid var(--accent); }
+        .ma-me-fail { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+      </style>
+      <div class="ma-slots-m">${slotsHtml}</div>
+      ${myStatusHtml}
+    `;
   }
 
   document.getElementById('body').innerHTML = `
@@ -581,6 +758,7 @@ function formatMyAnswer(myInput) {
   if (p.text) return p.text;
   if (p.count != null) return `${p.count} taps`;
   if (p.aligned) return '✓ 지도 완성';
+  if (p.eliminated) return '✓ 위험요소 제거';
   if (p.tapped_at) return '✓ 반응';
   return null;
 }
@@ -610,6 +788,28 @@ function renderScene(state) {
   // map_align 은 전용 렌더러 호출 후 종료 — 일반 input UI 와 분기 다름
   if (type === 'map_align') {
     renderMapAlignGame(state);
+    return;
+  }
+
+  // match3 도 전용 렌더러
+  if (type === 'match3') {
+    renderMatch3Game(state);
+    return;
+  }
+
+  // manual: 진행자가 메인에서 수동 진행 — 청중은 안내만 보고 대기
+  if (type === 'manual') {
+    document.getElementById('body').innerHTML = `
+      <div class="scene">
+        <div class="scene-prompt">${escapeHtml(p.prompt || '잠시만 기다려주세요')}</div>
+        <div class="waiting" style="margin-top: 16px;">
+          <div class="waiting-dot"></div>
+          <h2>실시간 미션 진행 중</h2>
+          <p>지금 진행 중인 미션을<br>주변에서 확인해주세요 👀</p>
+        </div>
+      </div>
+    `;
+    stopTimer();
     return;
   }
 
@@ -736,6 +936,7 @@ function renderMapAlignGame(state) {
     <div class="scene">
       <div class="scene-prompt">${escapeHtml(p.prompt || '')}</div>
       ${timerHtml}
+      <div class="map-progress" id="mapProgress">선착순 ${p.winners_needed ?? 3}명 도전 · <b id="mapProgressN">0</b> / ${p.winners_needed ?? 3}</div>
       <div class="map-hint" id="mapHint">👆 빨간 지도를 드래그해서 정확히 겹쳐보세요</div>
       <div class="map-stage" id="mapStage">
         <img class="map-base" id="mapBase" src="${escapeHtml(cfg.mapSrc)}" alt="map" draggable="false">
@@ -747,6 +948,20 @@ function renderMapAlignGame(state) {
 
   initMapAlignDrag(cfg);
   startTimerLoop(state);
+  updateMapAlignProgress();  // 진입 시점에도 한 번 그려주기 (이미 누군가 완료했을 수도)
+}
+
+// 실시간 선착순 카운터 — inputs 구독 콜백에서 호출됨
+function updateMapAlignProgress() {
+  const nEl = document.getElementById('mapProgressN');
+  if (!nEl) return;
+  const aligned = Object.values(currentInputs).filter(i => i?.input?.aligned).length;
+  const needed = currentState?.payload?.winners_needed ?? 3;
+  nEl.textContent = aligned;
+  const wrap = document.getElementById('mapProgress');
+  if (wrap) {
+    wrap.classList.toggle('full', aligned >= needed);
+  }
 }
 
 function initMapAlignDrag(cfg) {
@@ -810,10 +1025,11 @@ function initMapAlignDrag(cfg) {
     detach();
 
     // Firebase 에 결과 기록 (UI 는 그대로 — renderSubmitted 호출 안 함)
+    const startedAt = currentState?.started_at || serverNow();
     set(ref(db, `inputs/${currentSceneId}/${user.user_id}`), {
-      timestamp: Date.now(),
+      timestamp: serverNow(),
       nickname: user.nickname,
-      input: { aligned: true, took_ms: Date.now() - (currentState?.started_at || Date.now()) }
+      input: { aligned: true, took_ms: serverNow() - startedAt }
     }).catch(err => console.warn('map_align submit failed', err));
   }
 
@@ -876,6 +1092,277 @@ function initMapAlignDrag(cfg) {
   window.addEventListener('mouseup',   onUp);
   window.addEventListener('touchend',  onUp);
   window.addEventListener('touchcancel', onUp);
+}
+
+// ════════════════════════════════════════════════════════════
+// s08_2_hidden — 매치-3 미니게임 (애니팡/캔디크러쉬 스타일)
+//   인접 두 타일 탭 → 자리 바꿈 → 같은 이모지 3개 일렬 시 제거 + 떨어지기 + 채움
+//   🔫 🔪 🏏 각각 한 번씩 매칭하면 클리어 → Firebase 에 eliminated:true 기록
+// ════════════════════════════════════════════════════════════
+function renderMatch3Game(state) {
+  const p = state.payload || {};
+  const cfg = {
+    dangers: p.dangers || ['🔫','🔪','🏏'],
+    safes:   p.safes   || ['🍎','🍋','🍇','🍓','🌸'],
+    rows:    p.rows    || 7,
+    cols:    p.cols    || 6,
+    winnersNeeded: p.winners_needed ?? 3,
+  };
+
+  const timerHtml = state.duration > 0
+    ? `<div class="timer-pill" id="timer">⏱ <b>--</b>초 남음</div>` : '';
+
+  const checklistHtml = cfg.dangers.map(d =>
+    `<div class="m3-danger" data-emoji="${d}">${d}</div>`
+  ).join('');
+
+  document.getElementById('body').innerHTML = `
+    <div class="scene m3-stage">
+      <div class="scene-prompt">${escapeHtml(p.prompt || '')}</div>
+      ${timerHtml}
+      <div class="m3-progress" id="m3Progress">선착순 ${cfg.winnersNeeded}명 도전 · <b id="m3ProgressN">0</b> / ${cfg.winnersNeeded}</div>
+      <div class="m3-checklist">${checklistHtml}</div>
+      <div class="m3-grid" id="m3Grid" style="grid-template-columns: repeat(${cfg.cols}, 1fr);"></div>
+      <div class="m3-banner" id="m3Banner">🎉 위험요소 모두 제거 완료!</div>
+    </div>
+  `;
+
+  // ── 클로저 안에 게임 상태 보관 ─────────────────────────────
+  const grid = makeInitialGrid(cfg);
+  const clearedDangers = new Set();
+  let selected = null;
+  let busy = false;
+  let won = false;
+
+  function paint() {
+    const gridEl = document.getElementById('m3Grid');
+    if (!gridEl) return;
+    let html = '';
+    for (let r = 0; r < cfg.rows; r++) {
+      for (let c = 0; c < cfg.cols; c++) {
+        html += `<div class="m3-cell${won ? ' locked' : ''}" data-r="${r}" data-c="${c}">${grid[r][c] || ''}</div>`;
+      }
+    }
+    gridEl.innerHTML = html;
+    gridEl.querySelectorAll('.m3-cell').forEach(el => {
+      el.onclick = () => onTap(+el.dataset.r, +el.dataset.c);
+    });
+    // 선택된 셀 표시 복원
+    if (selected) {
+      const sel = gridEl.querySelector(`.m3-cell[data-r="${selected.r}"][data-c="${selected.c}"]`);
+      if (sel) sel.classList.add('selected');
+    }
+  }
+
+  function refreshChecklist() {
+    cfg.dangers.forEach(d => {
+      const el = document.querySelector(`.m3-danger[data-emoji="${d}"]`);
+      if (el) el.classList.toggle('cleared', clearedDangers.has(d));
+    });
+  }
+
+  function setSelected(r, c) {
+    document.querySelectorAll('.m3-cell.selected').forEach(el => el.classList.remove('selected'));
+    selected = (r === null) ? null : { r, c };
+    if (selected) {
+      const el = document.querySelector(`.m3-cell[data-r="${r}"][data-c="${c}"]`);
+      if (el) el.classList.add('selected');
+    }
+  }
+
+  async function onTap(r, c) {
+    if (busy || won) return;
+    if (!selected) { setSelected(r, c); return; }
+    if (selected.r === r && selected.c === c) { setSelected(null); return; }
+    const dr = Math.abs(selected.r - r);
+    const dc = Math.abs(selected.c - c);
+    if (dr + dc === 1) {
+      const r1 = selected.r, c1 = selected.c;
+      setSelected(null);
+      await trySwap(r1, c1, r, c);
+    } else {
+      setSelected(r, c);
+    }
+  }
+
+  async function trySwap(r1, c1, r2, c2) {
+    busy = true;
+    swapTiles(grid, r1, c1, r2, c2);
+    paint();
+    await m3Sleep(120);
+
+    const initialMatches = findMatches(grid);
+    if (initialMatches.length === 0) {
+      // 매치 안 만들면 되돌리기
+      swapTiles(grid, r1, c1, r2, c2);
+      paint();
+      busy = false;
+      return;
+    }
+
+    // 캐스케이드 처리
+    while (true) {
+      const ms = findMatches(grid);
+      if (ms.length === 0) break;
+
+      // 위험 요소 클리어 체크
+      for (const { r, c } of ms) {
+        const e = grid[r][c];
+        if (cfg.dangers.includes(e)) clearedDangers.add(e);
+      }
+
+      // 매치 셀 시각화
+      for (const { r, c } of ms) {
+        const el = document.querySelector(`.m3-cell[data-r="${r}"][data-c="${c}"]`);
+        if (el) el.classList.add('matching');
+      }
+      refreshChecklist();
+      await m3Sleep(280);
+
+      // 제거 + 중력 + 리필
+      for (const { r, c } of ms) grid[r][c] = null;
+      applyGravity(grid);
+      refillGrid(grid, cfg);
+      paint();
+      await m3Sleep(180);
+    }
+
+    // 승리 체크
+    if (!won && cfg.dangers.every(d => clearedDangers.has(d))) {
+      won = true;
+      onWin();
+    }
+
+    busy = false;
+  }
+
+  function onWin() {
+    if (submitted || !currentSceneId || !user) return;
+    submitted = true;
+    document.getElementById('m3Banner')?.classList.add('show');
+    // 그리드 잠금
+    document.querySelectorAll('.m3-cell').forEach(el => el.classList.add('locked'));
+    // Firebase 기록
+    const startedAt = currentState?.started_at || serverNow();
+    set(ref(db, `inputs/${currentSceneId}/${user.user_id}`), {
+      timestamp: serverNow(),
+      nickname: user.nickname,
+      input: { eliminated: true, took_ms: serverNow() - startedAt }
+    }).catch(err => console.warn('match3 submit failed', err));
+  }
+
+  paint();
+  refreshChecklist();
+  startTimerLoop(state);
+  updateMatch3Progress();   // 입장 시점 카운터 한 번 그리기
+}
+
+// ── match-3 보조 함수들 (순수 로직) ─────────────────────────
+function m3Sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function swapTiles(grid, r1, c1, r2, c2) {
+  const t = grid[r1][c1]; grid[r1][c1] = grid[r2][c2]; grid[r2][c2] = t;
+}
+
+function makeInitialGrid(cfg) {
+  const grid = [];
+  for (let r = 0; r < cfg.rows; r++) {
+    grid.push(new Array(cfg.cols).fill(null));
+    for (let c = 0; c < cfg.cols; c++) {
+      grid[r][c] = pickInitialTile(grid, r, c, cfg);
+    }
+  }
+  return grid;
+}
+
+function pickInitialTile(grid, r, c, cfg) {
+  const pool = [...cfg.dangers, ...cfg.safes];
+  const forbidden = new Set();
+  if (c >= 2 && grid[r][c - 1] === grid[r][c - 2]) forbidden.add(grid[r][c - 1]);
+  if (r >= 2 && grid[r - 1][c] === grid[r - 2][c]) forbidden.add(grid[r - 1][c]);
+  const allowed = pool.filter(p => !forbidden.has(p));
+  return allowed[Math.floor(Math.random() * allowed.length)] || pool[0];
+}
+
+function findMatches(grid) {
+  const matched = new Set();
+  const rows = grid.length;
+  const cols = grid[0].length;
+
+  // 가로
+  for (let r = 0; r < rows; r++) {
+    let runStart = 0;
+    for (let c = 1; c <= cols; c++) {
+      const cur = (c < cols) ? grid[r][c] : null;
+      const startVal = grid[r][runStart];
+      const same = (c < cols && cur && cur === startVal);
+      if (!same) {
+        if (c - runStart >= 3 && startVal != null) {
+          for (let cc = runStart; cc < c; cc++) matched.add(`${r},${cc}`);
+        }
+        runStart = c;
+      }
+    }
+  }
+
+  // 세로
+  for (let c = 0; c < cols; c++) {
+    let runStart = 0;
+    for (let r = 1; r <= rows; r++) {
+      const cur = (r < rows) ? grid[r][c] : null;
+      const startVal = grid[runStart][c];
+      const same = (r < rows && cur && cur === startVal);
+      if (!same) {
+        if (r - runStart >= 3 && startVal != null) {
+          for (let rr = runStart; rr < r; rr++) matched.add(`${rr},${c}`);
+        }
+        runStart = r;
+      }
+    }
+  }
+
+  return [...matched].map(k => {
+    const [r, c] = k.split(',').map(Number);
+    return { r, c };
+  });
+}
+
+function applyGravity(grid) {
+  const rows = grid.length, cols = grid[0].length;
+  for (let c = 0; c < cols; c++) {
+    let writeRow = rows - 1;
+    for (let r = rows - 1; r >= 0; r--) {
+      if (grid[r][c] !== null) {
+        if (writeRow !== r) {
+          grid[writeRow][c] = grid[r][c];
+          grid[r][c] = null;
+        }
+        writeRow--;
+      }
+    }
+  }
+}
+
+function refillGrid(grid, cfg) {
+  const pool = [...cfg.dangers, ...cfg.safes];
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[0].length; c++) {
+      if (grid[r][c] === null) {
+        grid[r][c] = pool[Math.floor(Math.random() * pool.length)];
+      }
+    }
+  }
+}
+
+// 실시간 선착순 카운터 (match3 용)
+function updateMatch3Progress() {
+  const nEl = document.getElementById('m3ProgressN');
+  if (!nEl) return;
+  const count = Object.values(currentInputs).filter(i => i?.input?.eliminated).length;
+  const needed = currentState?.payload?.winners_needed ?? 3;
+  nEl.textContent = count;
+  const wrap = document.getElementById('m3Progress');
+  if (wrap) wrap.classList.toggle('full', count >= needed);
 }
 
 function renderSubmitted(answerLabel) {
@@ -1057,6 +1544,11 @@ function subscribeToState() {
           // 이미 reveal 단계면 결과 다시 그리기
           if (currentState?.phase === 'reveal') {
             renderRevealResults(currentState, currentInputs);
+          }
+          // map_align / match3 진행 중이면 선착순 카운터 실시간 업데이트
+          if (currentState?.phase === 'collecting') {
+            if (currentState?.type === 'map_align') updateMapAlignProgress();
+            if (currentState?.type === 'match3')    updateMatch3Progress();
           }
         });
       }

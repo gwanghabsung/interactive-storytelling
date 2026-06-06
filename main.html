@@ -5,7 +5,7 @@
 <title>Interactive Audience Game</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #000;
@@ -74,15 +74,22 @@
   }
 
   .overlay-timer {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 64px; font-weight: 700;
+    font-family: 'Orbitron', 'JetBrains Mono', monospace;
+    font-size: 80px; font-weight: 900;
     color: var(--accent);
-    letter-spacing: -0.05em;
-    text-shadow: 0 0 24px rgba(255,214,10,0.5);
-    transition: color 0.3s;
+    letter-spacing: 0.08em;
+    text-shadow:
+      0 0 12px rgba(255,214,10,0.85),
+      0 0 28px rgba(255,214,10,0.5),
+      0 0 56px rgba(255,214,10,0.25);
+    transition: color 0.3s, text-shadow 0.3s;
   }
   .overlay-timer.warning {
     color: var(--danger);
+    text-shadow:
+      0 0 12px rgba(255,61,113,0.85),
+      0 0 28px rgba(255,61,113,0.55),
+      0 0 56px rgba(255,61,113,0.3);
     animation: shake 0.3s ease-in-out infinite;
   }
   @keyframes shake {
@@ -97,11 +104,16 @@
     display: flex; flex-direction: column; gap: 16px;
   }
   .res-row {
-    display: grid; grid-template-columns: 240px 1fr 100px;
+    display: grid; grid-template-columns: 320px 1fr 100px;
     gap: 20px; align-items: center;
   }
-  .res-label { font-size: 24px; font-weight: 500; text-align: left;
-               text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+  .res-label {
+    font-size: 24px; font-weight: 500; text-align: left;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .res-track {
     background: rgba(255,255,255,0.1);
     backdrop-filter: blur(8px);
@@ -276,6 +288,350 @@
     text-transform: uppercase;
   }
   .hud-btn:hover { background: rgba(255,255,255,0.1); }
+
+  /* ── 진행자 컨트롤 (영상 스킵 / 타이머 감축) ── */
+  .dev-controls {
+    position: fixed;
+    bottom: 20px; right: 20px;
+    display: none;
+    gap: 6px;
+    z-index: 100;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(10px);
+    padding: 6px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+    opacity: 0.35;
+    transition: opacity 0.2s;
+  }
+  .dev-controls.active { display: flex; }
+  .dev-controls:hover { opacity: 1; }
+  .dev-btn {
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--text);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+  }
+  .dev-btn:hover { background: rgba(255,255,255,0.18); }
+  .dev-btn:active { transform: scale(0.94); }
+  .dev-btn.danger { color: var(--danger); border-color: rgba(255,61,113,0.4); }
+  .dev-btn.danger:hover { background: rgba(255,61,113,0.15); }
+
+  /* ── QTE BURST (탭핑 연타) ── */
+  /* 배터리 박스: 네모칸 안에 큰 숫자, 아래에서 위로 차오름 */
+  .qte-battery {
+    position: relative;
+    width: clamp(360px, 42vw, 560px);
+    height: clamp(220px, 28vw, 360px);
+    border: 4px solid var(--accent);
+    border-radius: 18px;
+    background: rgba(0,0,0,0.7);
+    overflow: hidden;
+    box-shadow:
+      0 0 48px rgba(255,214,10,0.35),
+      inset 0 0 24px rgba(255,214,10,0.18);
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  /* 사이버 그리드 배경 */
+  .qte-battery::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,214,10,0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,214,10,0.08) 1px, transparent 1px);
+    background-size: 28px 28px;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .qte-battery-fill {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 0%;
+    background: linear-gradient(180deg,
+      rgba(255,214,10,0.55) 0%,
+      rgba(255,140,0,0.85) 60%,
+      rgba(255,100,0,0.95) 100%);
+    box-shadow: 0 -2px 16px rgba(255,214,10,0.5);
+    transition: height 80ms linear;
+    z-index: 2;
+  }
+  /* 차오르는 표면에 옅은 wave 효과 */
+  .qte-battery-fill::after {
+    content: '';
+    position: absolute;
+    top: -3px; left: 0; right: 0;
+    height: 6px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.6), transparent);
+  }
+  .qte-battery-num {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(120px, 18vw, 220px);
+    font-weight: 900;
+    color: #fff;
+    text-shadow:
+      0 0 16px rgba(0,0,0,0.95),
+      0 4px 16px rgba(0,0,0,0.95),
+      0 0 32px rgba(255,214,10,0.4);
+    letter-spacing: -0.02em;
+    line-height: 1;
+    z-index: 3;
+    transition: transform 0.08s;
+  }
+  .qte-battery-num.bump { transform: scale(1.12); }
+  .qte-battery.done {
+    border-color: var(--success);
+    box-shadow:
+      0 0 64px rgba(0,214,143,0.6),
+      inset 0 0 32px rgba(0,214,143,0.28);
+  }
+  .qte-battery.done .qte-battery-fill {
+    background: linear-gradient(180deg,
+      rgba(0,214,143,0.7) 0%,
+      rgba(0,180,120,0.9) 60%,
+      rgba(0,150,100,0.98) 100%);
+    box-shadow: 0 -2px 16px rgba(0,214,143,0.6);
+    height: 100%;
+  }
+  .qte-battery.done .qte-battery-num {
+    text-shadow:
+      0 0 16px rgba(0,0,0,0.95),
+      0 4px 16px rgba(0,0,0,0.95),
+      0 0 32px rgba(0,214,143,0.5);
+  }
+  .qte-goal-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: -8px;
+  }
+  /* 마구잡이로 떠다니는 닉네임 (overlay-content 기준 absolute) */
+  .qte-names {
+    position: absolute;
+    inset: -60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .qte-name {
+    position: absolute;
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    white-space: nowrap;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.95), 0 0 24px rgba(0,0,0,0.6);
+    animation: qte-pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+    color: rgba(255,255,255,0.92);
+  }
+  .qte-name .cnt {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    margin-left: 6px;
+    font-weight: 700;
+  }
+  @keyframes qte-pop {
+    0%   { transform: scale(1.5); opacity: 0.4; }
+    60%  { transform: scale(0.94); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ── SUCCESS / FAIL 큰 패널 (탭 결과 발표) ── */
+  .success-fail-panel {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-size: clamp(80px, 14vw, 220px);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    animation: sf-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .success-fail-panel.success-color {
+    color: var(--success);
+    text-shadow: 0 0 80px rgba(0,214,143,0.55), 0 6px 28px rgba(0,0,0,0.95);
+  }
+  .success-fail-panel.fail-color {
+    color: var(--danger);
+    text-shadow: 0 0 80px rgba(255,61,113,0.5), 0 6px 28px rgba(0,0,0,0.95);
+  }
+  .success-fail-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(32px, 5vw, 64px);
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 16px;
+    text-shadow: 0 4px 16px rgba(0,0,0,0.9);
+  }
+  .success-fail-sub .goal { color: var(--muted); font-size: 0.7em; }
+  @keyframes sf-pop {
+    0%   { transform: scale(0.3); opacity: 0; }
+    60%  { transform: scale(1.08); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ── 엔딩 크레딧 (영화 스타일 위로 스크롤) ── */
+  .credits-screen {
+    position: fixed; inset: 0;
+    background: #000;
+    z-index: 60;
+    overflow: hidden;
+    display: none;
+  }
+  .credits-screen.show { display: block; }
+  .credits-roll {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, 0);
+    top: 100vh;                 /* 시작 위치: 화면 아래 */
+    width: 90%; max-width: 720px;
+    text-align: center;
+    color: #f5f5f7;
+    padding-bottom: 60vh;
+    animation-name: credits-scroll;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+    /* animation-duration 은 JS 에서 inline 으로 지정 */
+  }
+  @keyframes credits-scroll {
+    0%   { top: 100vh; }
+    100% { top: -100%; }
+  }
+  .credits-roll h1 {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-size: clamp(60px, 9vw, 120px);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    color: var(--accent);
+    margin: 0 0 16px 0;
+  }
+  .credits-roll .subtitle {
+    font-size: clamp(20px, 2.5vw, 32px);
+    font-weight: 400;
+    color: var(--muted);
+    margin-bottom: 120px;
+  }
+  .credits-roll section {
+    margin-bottom: 100px;
+  }
+  .credits-roll h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+    font-weight: 700;
+    margin-bottom: 24px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.18);
+  }
+  .credits-roll .row {
+    font-size: clamp(20px, 2.2vw, 28px);
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+  .credits-roll .row .cnt {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    margin-left: 14px;
+    font-weight: 700;
+  }
+  .credits-roll .big-stat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(60px, 10vw, 120px);
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+  .credits-roll .closing {
+    font-size: clamp(22px, 2.6vw, 32px);
+    font-weight: 500;
+    line-height: 1.6;
+    margin-top: 60px;
+    white-space: pre-line;
+  }
+  .credits-restart {
+    position: fixed;
+    bottom: 32px; left: 50%; transform: translateX(-50%);
+    z-index: 61;
+    opacity: 0;
+    transition: opacity 0.6s;
+    pointer-events: none;
+  }
+  .credits-restart.show { opacity: 1; pointer-events: auto; }
+
+  /* ── GAME OVER 화면 ── */
+  .gameover-screen {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.93);
+    backdrop-filter: blur(10px);
+    z-index: 70;
+    display: none;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 20px;
+  }
+  .gameover-screen.show {
+    display: flex;
+    animation: gameover-flash 0.4s ease-out;
+  }
+  .gameover-text {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(80px, 14vw, 220px);
+    font-weight: 900;
+    color: var(--danger);
+    letter-spacing: 0.12em;
+    text-shadow:
+      0 0 24px rgba(255,61,113,0.9),
+      0 0 60px rgba(255,61,113,0.5),
+      0 0 120px rgba(255,61,113,0.25);
+    animation: gameover-glitch 0.5s ease-out;
+    line-height: 1;
+  }
+  .gameover-sub {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-size: clamp(20px, 2.4vw, 30px);
+    font-weight: 500;
+    color: var(--text);
+    margin-top: 8px;
+  }
+  .gameover-hint {
+    margin-top: 40px;
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    animation: gameover-blink 1s ease-in-out infinite;
+  }
+  @keyframes gameover-flash {
+    0%   { background: rgba(255,61,113,0.55); opacity: 0; }
+    30%  { background: rgba(0,0,0,0.93); opacity: 1; }
+    100% { background: rgba(0,0,0,0.93); opacity: 1; }
+  }
+  @keyframes gameover-glitch {
+    0%, 100% { transform: translateX(0); }
+    10% { transform: translateX(-6px); }
+    20% { transform: translateX(6px); }
+    30% { transform: translateX(-3px); }
+    40% { transform: translateX(3px); }
+    50% { transform: translateX(0); }
+  }
+  @keyframes gameover-blink {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.95; }
+  }
 </style>
 </head>
 <body>
@@ -291,6 +647,17 @@
   </div>
 
   <div class="ending-screen" id="endingScreen"></div>
+
+  <!-- 엔딩 크레딧 (스크롤) -->
+  <div class="credits-screen" id="creditsScreen"></div>
+  <button class="big-btn ghost credits-restart" id="creditsRestartBtn">다시 시작</button>
+
+  <!-- GAME OVER 화면 -->
+  <div class="gameover-screen" id="gameOverScreen">
+    <div class="gameover-text">GAME OVER</div>
+    <div class="gameover-sub" id="gameOverSub"></div>
+    <div class="gameover-hint">RESTARTING...</div>
+  </div>
 
   <div class="start-screen" id="startScreen">
     <div class="start-eyebrow">◉ Audience Live · 인터랙티브 게임</div>
@@ -318,6 +685,14 @@
   <button class="hud-btn" id="restartBtn" style="display:none">RESTART</button>
 </div>
 
+<!-- 진행자 컨트롤 (영상 스킵 / 타이머 감축) -->
+<div class="dev-controls" id="devControls">
+  <button class="dev-btn" id="skipVideoBtn" title="현재 영상을 끝(또는 freeze 지점)까지 스킵">⏭ 영상</button>
+  <button class="dev-btn" id="shave5Btn" title="투표 타이머 -5초">−5s</button>
+  <button class="dev-btn" id="shave10Btn" title="투표 타이머 -10초">−10s</button>
+  <button class="dev-btn danger" id="endVoteBtn" title="투표를 즉시 종료">⏹ 투표</button>
+</div>
+
 <!-- 씬 정의 (편집 가능) -->
 <script src="scenes.js"></script>
 
@@ -331,13 +706,13 @@ import {
 // Firebase 설정 — 본인 firebaseConfig 객체로 교체
 // ════════════════════════════════════════════════════════════
 const firebaseConfig = {
-  apiKey: "여기에_API_KEY",
-  authDomain: "여기에_AUTH_DOMAIN",
-  databaseURL: "여기에_DATABASE_URL",
-  projectId: "여기에_PROJECT_ID",
-  storageBucket: "여기에_STORAGE_BUCKET",
-  messagingSenderId: "여기에_SENDER_ID",
-  appId: "여기에_APP_ID"
+  apiKey: "AIzaSyCl0_QKjC8LxEYNMQLNh1EJWBZom2CFXro",
+  authDomain: "gen-lang-client-0314320228.firebaseapp.com",
+  databaseURL: "https://gen-lang-client-0314320228-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "gen-lang-client-0314320228",
+  storageBucket: "gen-lang-client-0314320228.firebasestorage.app",
+  messagingSenderId: "1077038002206",
+  appId: "1:1077038002206:web:217cd7401a119e9aee7e0f"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -472,8 +847,13 @@ let currentInputs = {};
 let overlayTimerId = null;
 let currentOverlayState = null;
 
+// 스토리 분기용 — 각 선택 씬의 결과(winner)를 기록 → 이후 branch 씬에서 참조
+// 예: choicesHistory['s06_1_decision'] = '구하러 간다'
+let choicesHistory = {};
+
 function showOverlay(scene_id, overlayDef) {
   currentOverlayState = { scene_id, overlay: overlayDef, started_at: Date.now() };
+  prevQteTotal = 0;  // 새 씬 시작 시 펄스 추적값 초기화
   renderOverlay(overlayDef.options || [], {}, overlayDef);
   overlay.classList.add('show');
   startOverlayTimer(overlayDef.duration || 10000);
@@ -482,10 +862,154 @@ function showOverlay(scene_id, overlayDef) {
 function hideOverlay() {
   overlay.classList.remove('show');
   currentOverlayState = null;
+  qteShellSceneId = null;   // 다음 씬에서 셸 새로 빌드되도록
   stopOverlayTimer();
 }
 
 function renderOverlay(options, tally, overlayDef, showWinner = false) {
+  // 탭핑 연타는 옵션 막대가 아니라 카운터 + 떠다니는 닉네임으로 표시
+  if (overlayDef.type === 'qte_burst') {
+    renderQteBurst(tally, overlayDef, showWinner);
+    return;
+  }
+
+  // manual: 진행자가 직접 "다음 진행" 버튼 눌러서 진행
+  if (overlayDef.type === 'manual') {
+    overlayContent.innerHTML = `
+      <style>
+        .ma-manual-wrap { display: flex; flex-direction: column; align-items: center; gap: 28px; margin-top: 24px; }
+        .ma-manual-btn {
+          padding: 22px 44px; border-radius: 999px;
+          background: var(--accent); color: #0a0a0f; border: none;
+          font-size: 22px; font-weight: 800; letter-spacing: -0.01em;
+          font-family: inherit; cursor: pointer;
+          box-shadow: 0 8px 32px rgba(255,214,10,0.4);
+          transition: all 0.2s;
+        }
+        .ma-manual-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(255,214,10,0.55); }
+        .ma-manual-btn:active { transform: translateY(0); }
+        .ma-manual-note {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 13px; color: var(--muted); letter-spacing: 0.05em;
+        }
+        .ma-manual-pulse {
+          width: 14px; height: 14px; border-radius: 50%;
+          background: var(--accent); display: inline-block; margin-right: 8px;
+          animation: maManualPulse 1.6s ease-in-out infinite;
+        }
+        @keyframes maManualPulse {
+          0%,100% { opacity: 1; transform: scale(1); }
+          50%     { opacity: 0.3; transform: scale(1.4); }
+        }
+      </style>
+      <div class="status-pill"><span class="ma-manual-pulse"></span>진행자 대기 중 — 수동 진행</div>
+      <div class="overlay-prompt">${escapeHtml(overlayDef.prompt || '')}</div>
+      <div class="ma-manual-wrap">
+        <button class="ma-manual-btn" id="manualAdvanceBtn">${escapeHtml(overlayDef.advance_label || '✓ 다음 진행')}</button>
+        <div class="ma-manual-note">버튼을 누르면 영상이 이어서 재생됩니다</div>
+      </div>
+    `;
+    document.getElementById('manualAdvanceBtn').onclick = () => {
+      // stopOverlayTimer() 를 부르면 waitForOverlayTimer() 가 즉시 풀림
+      stopOverlayTimer();
+    };
+    return;
+  }
+
+  // map_align / match3: 청중 폰에서 진행 — 메인 화면은 선착순 슬롯 표시
+  if (overlayDef.type === 'map_align' || overlayDef.type === 'match3') {
+    const isMatch3 = overlayDef.type === 'match3';
+    const successKey = isMatch3 ? 'eliminated' : 'aligned';
+    const missionEmoji = isMatch3 ? '🔍' : '🗺️';
+    const needed = overlayDef.winners_needed ?? 3;
+    // 성공자만 골라서 took_ms 순으로 정렬 (없으면 timestamp 폴백)
+    const winners = Object.values(currentInputs)
+      .filter(i => i?.input?.[successKey])
+      .sort((a, b) => {
+        const at = a.input?.took_ms ?? a.timestamp ?? 0;
+        const bt = b.input?.took_ms ?? b.timestamp ?? 0;
+        return at - bt;
+      })
+      .slice(0, needed);
+    const winnerCount = winners.length;
+    const allDone = winnerCount >= needed;
+
+    const rankEmoji = ['🥇','🥈','🥉','4','5','6','7','8','9'];
+    const slotsHtml = Array.from({ length: needed }, (_, idx) => {
+      const w = winners[idx];
+      const rank = rankEmoji[idx] || `${idx + 1}`;
+      if (w) {
+        const secs = (w.input?.took_ms != null) ? (w.input.took_ms / 1000).toFixed(1) + 's' : '';
+        return `
+          <div class="ma-slot ma-slot-filled">
+            <div class="ma-slot-rank">${rank}</div>
+            <div class="ma-slot-name">${escapeHtml(w.nickname || '익명')}</div>
+            <div class="ma-slot-time">${secs}</div>
+          </div>`;
+      }
+      return `
+        <div class="ma-slot ma-slot-empty">
+          <div class="ma-slot-rank">${rank}</div>
+          <div class="ma-slot-name">대기 중…</div>
+          <div class="ma-slot-time">&nbsp;</div>
+        </div>`;
+    }).join('');
+
+    const statusText = (showWinner || allDone)
+      ? `🏆 미션 완료 · 선착순 ${needed}명`
+      : `${missionEmoji} 진행 중 · ${winnerCount} / ${needed}명 완성`;
+
+    overlayContent.innerHTML = `
+      <style>
+        .ma-wrap {
+          display: flex; gap: 24px; justify-content: center;
+          margin-top: 32px; flex-wrap: wrap;
+        }
+        .ma-slot {
+          width: 220px; padding: 24px 16px;
+          border-radius: 16px; border: 2px solid var(--line);
+          background: var(--surface-2);
+          display: flex; flex-direction: column; align-items: center; gap: 8px;
+          transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .ma-slot-rank {
+          font-size: 44px; line-height: 1;
+          font-weight: 800; letter-spacing: -0.02em;
+        }
+        .ma-slot-name {
+          font-size: 22px; font-weight: 700; letter-spacing: -0.01em;
+          max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .ma-slot-time {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 14px; color: var(--muted); letter-spacing: 0.05em;
+        }
+        .ma-slot-empty {
+          opacity: 0.4;
+        }
+        .ma-slot-empty .ma-slot-name { color: var(--muted); font-weight: 400; }
+        .ma-slot-filled {
+          border-color: var(--accent);
+          background: linear-gradient(180deg, rgba(255,214,10,0.12), rgba(255,214,10,0.04));
+          box-shadow: 0 8px 24px rgba(255,214,10,0.18);
+          animation: maPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .ma-slot-filled .ma-slot-name { color: var(--text); }
+        .ma-slot-filled .ma-slot-time { color: var(--accent); font-weight: 700; }
+        @keyframes maPop {
+          0%   { transform: scale(0.85); opacity: 0; }
+          60%  { transform: scale(1.06); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+      </style>
+      <div class="status-pill">${statusText}</div>
+      <div class="overlay-prompt">${escapeHtml(overlayDef.prompt || '')}</div>
+      ${!showWinner ? `<div class="overlay-timer" id="overlayTimer">--s</div>` : ''}
+      <div class="ma-wrap">${slotsHtml}</div>
+    `;
+    return;
+  }
+
   const max = Math.max(1, ...Object.values(tally), 1);
   const winnerKey = showWinner
     ? Object.entries(tally).sort((a,b)=>b[1]-a[1])[0]?.[0] : null;
@@ -512,26 +1036,222 @@ function renderOverlay(options, tally, overlayDef, showWinner = false) {
     ${!showWinner ? `<div class="overlay-timer" id="overlayTimer">--s</div>` : ''}
     <div class="results-grid">${barsHtml}</div>
   `;
+
+  // 긴 옵션 라벨이 컬럼 폭 넘으면 폰트 단계 축소 (한 줄 유지)
+  fitLabelsToWidth();
 }
+
+function fitLabelsToWidth() {
+  const labels = overlayContent.querySelectorAll('.res-label');
+  labels.forEach(el => {
+    el.style.fontSize = '';
+    let size = 24;
+    requestAnimationFrame(() => {
+      while (el.scrollWidth > el.clientWidth && size > 14) {
+        size -= 1;
+        el.style.fontSize = size + 'px';
+      }
+    });
+  });
+}
+
+// ── QTE BURST 전용 렌더 ──────────────────────────────────────
+// tally: { nickname: count }
+// 중앙에 큰 배터리 박스(현재 탭 수, 차오르는 fill), 양옆에 탭 많이 친 닉네임
+// 매 입력마다 전체를 다시 그리지 않고 셸을 한 번만 빌드 → 카운터/이름만 직접 DOM 업데이트
+let prevQteTotal = 0;
+let qteShellSceneId = null;   // 현재 셸이 어느 씬용인지 추적
+
+function renderQteBurst(tally, overlayDef, showWinner) {
+  ensureQteBurstShell(overlayDef);
+  updateQteBattery(tally, overlayDef);
+  updateQteNames(tally);
+}
+
+function ensureQteBurstShell(overlayDef) {
+  // 이미 동일 씬의 셸이 있으면 재사용 (실시간 업데이트 빠르게 하려고)
+  const sceneKey = currentOverlayState?.scene_id || 'qte_burst';
+  if (qteShellSceneId === sceneKey && document.getElementById('qteBattery')) return;
+  qteShellSceneId = sceneKey;
+
+  const goal = overlayDef.tap_target_total || 30;
+  overlayContent.innerHTML = `
+    <div class="qte-names" id="qteNames"></div>
+    <div class="status-pill" id="qteStatus">투표 진행 중 · 0명 참여</div>
+    <div class="overlay-prompt">${escapeHtml(overlayDef.prompt || '')}</div>
+    <div class="overlay-timer" id="overlayTimer">--s</div>
+    <div class="qte-battery" id="qteBattery">
+      <div class="qte-battery-fill" id="qteFill"></div>
+      <div class="qte-battery-num" id="qteNum">0</div>
+    </div>
+    <div class="qte-goal-label">목표 ${goal}</div>
+  `;
+  prevQteTotal = 0;
+}
+
+function updateQteBattery(tally, overlayDef) {
+  const total = Object.values(tally).reduce((a, b) => a + (b || 0), 0);
+  const goal = overlayDef.tap_target_total || 30;
+  const pct = Math.min(100, (total / goal) * 100);
+  const done = total >= goal;
+
+  const num = document.getElementById('qteNum');
+  const fill = document.getElementById('qteFill');
+  const battery = document.getElementById('qteBattery');
+  const status = document.getElementById('qteStatus');
+  if (!num || !fill || !battery) return;
+
+  num.textContent = total;
+  fill.style.height = pct + '%';
+  battery.classList.toggle('done', done);
+
+  if (status) {
+    const n = Object.entries(tally).filter(([, c]) => c > 0).length;
+    status.textContent = `투표 진행 중 · ${n}명 참여`;
+  }
+
+  // 값이 늘 때마다 짧은 펄스 (animation restart)
+  if (total > prevQteTotal) {
+    num.classList.remove('bump');
+    // 강제 reflow 후 다시 추가해야 animation 이 재시작됨
+    // eslint-disable-next-line no-unused-expressions
+    void num.offsetWidth;
+    num.classList.add('bump');
+    setTimeout(() => num.classList.remove('bump'), 90);
+  }
+  prevQteTotal = total;
+}
+
+function updateQteNames(tally) {
+  const container = document.getElementById('qteNames');
+  if (!container) return;
+
+  const tappers = Object.entries(tally)
+    .filter(([, c]) => c > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 14);
+  const maxCount = tappers[0]?.[1] || 1;
+
+  container.innerHTML = tappers.map(([name, count]) => {
+    const seed = strHash(name);
+    const sideRand = (seed % 1000) / 1000;
+    const xRand    = ((seed >> 3) % 1000) / 1000;
+    const yRand    = ((seed >> 7) % 1000) / 1000;
+    const rotRand  = ((seed >> 11) % 1000) / 1000;
+
+    const side = sideRand < 0.5 ? 'left' : 'right';
+    const x = side === 'left' ? (2 + xRand * 24) : (74 + xRand * 24);
+    const y = 8 + yRand * 80;
+    const rot = -8 + rotRand * 16;
+
+    const sizeFactor = Math.sqrt(count / maxCount);
+    const fontSize = 16 + 14 * sizeFactor;
+
+    return `<div class="qte-name" style="left:${x}%; top:${y}%; font-size:${fontSize}px; transform: rotate(${rot}deg)">
+      ${escapeHtml(name)}<span class="cnt">${count}</span>
+    </div>`;
+  }).join('');
+}
+
+// 닉네임 → 정수 해시 (위치 결정용)
+function strHash(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h * 31) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+// 7-3 qte_burst 의 최종 탭 통계 — 크레딧 씬에서 사용 ({ nickname: count })
+let qteBurstFinalStats = null;
+
+// result_mode === 'success_fail' 일 때 outcome 산출
+//   - qte_burst: 누적 탭 수 >= success_threshold
+//   - choice/qte/ox/text: 응답한 사람 수 >= success_threshold (기본 1)
+function computeSuccessFail(overlayDef, tally, rawInputs) {
+  const threshold = overlayDef.success_threshold ?? 1;
+  let metric;
+  if (overlayDef.type === 'qte_burst') {
+    metric = Object.values(tally).reduce((a, b) => a + (b || 0), 0);
+  } else {
+    metric = Object.keys(rawInputs || {}).length;
+  }
+  return metric >= threshold ? 'success' : 'fail';
+}
+
+// 큰 SUCCESS / FAIL 패널 — result_mode === 'success_fail' 의 reveal 단계 렌더
+function renderSuccessFail(outcome, overlayDef, tally) {
+  const isSuccess = outcome === 'success';
+  const text = isSuccess
+    ? (overlayDef.success_text || '✅ SUCCESS')
+    : (overlayDef.fail_text || '❌ FAIL');
+
+  // qte_burst 인 경우 누적 탭 카운트도 같이 보여줌
+  let subText = '';
+  if (overlayDef.type === 'qte_burst') {
+    const total = Object.values(tally).reduce((a, b) => a + (b || 0), 0);
+    const goal = overlayDef.tap_target_total || overlayDef.success_threshold || 0;
+    subText = `<div class="success-fail-sub">${total}<span class="goal"> / ${goal}</span></div>`;
+  }
+
+  overlayContent.innerHTML = `
+    <div class="success-fail-panel ${isSuccess ? 'success-color' : 'fail-color'}">
+      ${escapeHtml(text)}
+    </div>
+    ${subText}
+  `;
+}
+
+// 외부에서 깎거나 즉시 종료할 수 있도록 모듈 변수로 보관
+let overlayTimerStartedAt = 0;
+let overlayTimerDurationMs = 0;
+let overlayTimerResolvers = [];
 
 function startOverlayTimer(durationMs) {
   stopOverlayTimer();
-  const startedAt = Date.now();
+  overlayTimerStartedAt = Date.now();
+  overlayTimerDurationMs = durationMs;
   const tick = () => {
     if (!currentOverlayState) return;
-    const remaining = Math.max(0, durationMs - (Date.now() - startedAt));
+    const remaining = Math.max(0, overlayTimerDurationMs - (Date.now() - overlayTimerStartedAt));
     const el = document.getElementById('overlayTimer');
     if (el) {
       el.textContent = (remaining/1000).toFixed(1) + 's';
       if (remaining < 3000) el.classList.add('warning');
       else el.classList.remove('warning');
     }
-    if (remaining > 0) overlayTimerId = requestAnimationFrame(tick);
+    if (remaining > 0) {
+      overlayTimerId = requestAnimationFrame(tick);
+    } else {
+      // 0 도달 → waitForOverlayTimer() 대기자들 깨우기
+      const resolvers = overlayTimerResolvers;
+      overlayTimerResolvers = [];
+      resolvers.forEach(r => r());
+    }
   };
   overlayTimerId = requestAnimationFrame(tick);
 }
+
+// 오버레이 타이머가 0 이 될 때까지 대기 (sleep 대체용)
+function waitForOverlayTimer() {
+  const remaining = overlayTimerDurationMs - (Date.now() - overlayTimerStartedAt);
+  if (remaining <= 0) return Promise.resolve();
+  return new Promise(resolve => overlayTimerResolvers.push(resolve));
+}
+
+// 외부 호출용: 남은 시간 ms 만큼 깎기 (음수가 되면 다음 tick 에서 종료)
+function shaveOverlayTimer(ms) {
+  if (!overlayTimerStartedAt) return;
+  overlayTimerDurationMs = Math.max(0, overlayTimerDurationMs - ms);
+}
 function stopOverlayTimer() {
   if (overlayTimerId) { cancelAnimationFrame(overlayTimerId); overlayTimerId = null; }
+  overlayTimerStartedAt = 0;
+  overlayTimerDurationMs = 0;
+  // 남아있는 대기자가 있으면 깨워서 풀어줌 (씬 강제 종료 시 안전장치)
+  if (overlayTimerResolvers.length) {
+    const rs = overlayTimerResolvers;
+    overlayTimerResolvers = [];
+    rs.forEach(r => r());
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -570,7 +1290,82 @@ async function playScene(sceneId) {
     await runVideoScene(sceneId, scene);
   } else if (scene.type === 'ending') {
     await runEndingScene(scene);
+  } else if (scene.type === 'credits') {
+    await runCreditsScene(scene);
+  } else if (scene.type === 'gameover') {
+    await runGameOverScene(scene);
+  } else if (scene.type === 'choice_only') {
+    await runChoiceOnlyScene(sceneId, scene);
+  } else if (scene.type === 'branch') {
+    await runBranchScene(sceneId, scene);
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// branch 씬 — 영상/오버레이 없이, 이전 선택에 따라 다음 씬으로 라우팅만
+// ────────────────────────────────────────────────────────────
+// 사용 예:
+//   's08_3_branch': {
+//     type: 'branch',
+//     if_choice_from: 's06_1_decision',
+//     next: {
+//       '구하러 간다':         's08_3a',
+//       '모른 척 한다':         's08_3a',
+//       '조력자에게 도움 요청': 's08_3b',
+//       default:               's08_3a'
+//     }
+//   }
+// ════════════════════════════════════════════════════════════
+async function runBranchScene(sceneId, scene) {
+  const sourceSceneId = scene.if_choice_from;
+  const recorded = sourceSceneId ? choicesHistory[sourceSceneId] : null;
+  console.log('  Branch from', sourceSceneId, '→', recorded);
+
+  // 매핑에 직접 일치 → 그 씬으로
+  // 일치 안 함 또는 미기록 → default 로 폴백
+  const nextId = (recorded && scene.next[recorded]) || scene.next.default;
+  if (nextId) return playScene(nextId);
+}
+
+// 영상 없이 선택지만 띄우는 씬 (미니게임 placeholder, 짧은 대사 분기 등에 사용)
+async function runChoiceOnlyScene(sceneId, scene) {
+  hideEnding();
+  // 검은 화면 유지 (직전 영상의 마지막 프레임이 남아있어도 그대로 OK)
+
+  const fbScene = {
+    scene_id: `${sceneId}_${Date.now()}`,
+    type: scene.overlay.type || 'choice',
+    started_at: Date.now(),
+    duration: scene.overlay.duration || 10000,
+    payload: buildOverlayPayload(scene.overlay),
+    phase: 'collecting',
+    updated_at: Date.now()
+  };
+  await set(stateRef, fbScene);
+  subscribeToInputs(fbScene.scene_id, scene.overlay);
+  showOverlay(fbScene.scene_id, scene.overlay);
+
+  await waitForOverlayTimer();
+
+  const winner = pickWinner(scene.overlay.type, currentInputs, scene.overlay, scene.next);
+  console.log('  Winner:', winner);
+  choicesHistory[sceneId] = winner;
+
+  await update(stateRef, { phase: 'reveal', updated_at: Date.now() });
+  renderOverlay(
+    scene.overlay.options || ['O','X'],
+    aggregateInputs(scene.overlay.type, currentInputs),
+    scene.overlay,
+    true
+  );
+  await sleep(3000);
+
+  hideOverlay();
+  if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
+  await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
+
+  const nextId = scene.next[winner] || scene.next.default;
+  if (nextId) return playScene(nextId);
 }
 
 async function runVideoScene(sceneId, scene) {
@@ -602,10 +1397,7 @@ async function runVideoScene(sceneId, scene) {
       type: scene.overlay.type,
       started_at: Date.now(),
       duration: scene.overlay.duration || 10000,
-      payload: {
-        prompt: scene.overlay.prompt,
-        options: scene.overlay.options || (scene.overlay.type === 'ox' ? ['O','X'] : undefined)
-      },
+      payload: buildOverlayPayload(scene.overlay),
       phase: 'collecting',
       updated_at: Date.now()
     };
@@ -615,16 +1407,50 @@ async function runVideoScene(sceneId, scene) {
     subscribeToInputs(fbScene.scene_id, scene.overlay);
     showOverlay(fbScene.scene_id, scene.overlay);
 
-    // 6) 투표 시간 동안 대기
-    await sleep(scene.overlay.duration || 10000);
+    // 6) 투표 시간 동안 대기 (진행자가 ⏹ 버튼이나 −Ns 로 단축 가능)
+    await waitForOverlayTimer();
 
-    // 7) 결과 계산
-    const winner = pickWinner(scene.overlay.type, currentInputs, scene.overlay, scene.next);
-    console.log('  Winner:', winner);
+    // 6-b) manual 타입은 청중 투표가 아니라 진행자 버튼 클릭 — reveal 없이 바로 다음 진행
+    if (scene.overlay.type === 'manual') {
+      console.log('  Manual advance');
+      choicesHistory[sceneId] = 'default';
+      hideOverlay();
+      if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
+      await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
+      // 영상 이어 재생
+      if (scene.resume_after_overlay) {
+        await playToEnd(activeVideo);
+      }
+      const nextManualId = (typeof scene.next === 'string')
+        ? scene.next
+        : (scene.next.default || Object.values(scene.next || {})[0]);
+      if (nextManualId) return playScene(nextManualId);
+      return;
+    }
 
-    // 8) reveal 단계 — 청중 폰에 결과 화면, 메인엔 우승 하이라이트
+    // 7) 결과 계산 — result_mode 가 'success_fail' 이면 성공/실패 판정, 아니면 기존 winner 로직
+    const finalTally = aggregateInputs(scene.overlay.type, currentInputs);
+    let outcome;
+    if (scene.overlay.result_mode === 'success_fail') {
+      outcome = computeSuccessFail(scene.overlay, finalTally, currentInputs);
+    } else {
+      outcome = pickWinner(scene.overlay.type, currentInputs, scene.overlay, scene.next);
+    }
+    console.log('  Outcome:', outcome);
+    choicesHistory[sceneId] = outcome;
+
+    // 7-b) qte_burst 의 최종 통계를 크레딧 씬에서 쓰도록 보관
+    if (scene.overlay.type === 'qte_burst') {
+      qteBurstFinalStats = finalTally;
+    }
+
+    // 8) reveal 단계
     await update(stateRef, { phase: 'reveal', updated_at: Date.now() });
-    renderOverlay(scene.overlay.options || ['O','X'], aggregateInputs(scene.overlay.type, currentInputs), scene.overlay, true);
+    if (scene.overlay.result_mode === 'success_fail') {
+      renderSuccessFail(outcome, scene.overlay, finalTally);
+    } else {
+      renderOverlay(scene.overlay.options || ['O','X'], finalTally, scene.overlay, true);
+    }
 
     // 9) 결과 음미 시간
     await sleep(3000);
@@ -634,8 +1460,13 @@ async function runVideoScene(sceneId, scene) {
     if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
     await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
 
+    // 10-b) 멈춰있던 영상 끝까지 재생 (resume_after_overlay) — 실패 시엔 스킵
+    if (scene.resume_after_overlay && outcome !== 'fail') {
+      await playToEnd(activeVideo);
+    }
+
     // 11) 분기
-    const nextId = scene.next[winner] || scene.next.default;
+    const nextId = scene.next[outcome] || scene.next.default;
     if (nextId) return playScene(nextId);
   } else {
     // freeze 없는 단순 재생
@@ -659,6 +1490,132 @@ async function runEndingScene(scene) {
   await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
 }
 
+// ════════════════════════════════════════════════════════════
+// GAME OVER 씬 — 실패 시 잠깐 표시 후 지정한 씬으로 재시도
+// ════════════════════════════════════════════════════════════
+async function runGameOverScene(scene) {
+  hideOverlay();
+  hideEnding();
+  vA.pause(); vB.pause();
+  vA.classList.remove('active');
+  vB.classList.remove('active');
+
+  const screen = document.getElementById('gameOverScreen');
+  document.getElementById('gameOverSub').textContent = scene.sub || '';
+  screen.classList.add('show');
+  await set(stateRef, { scene_id: '', type: 'gameover', phase: 'idle', updated_at: Date.now() });
+
+  await sleep(scene.duration || 3500);
+  screen.classList.remove('show');
+
+  if (scene.next) {
+    const nextId = typeof scene.next === 'string' ? scene.next : scene.next.default;
+    if (nextId) return playScene(nextId);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// 엔딩 크레딧 — 영화 엔딩처럼 아래에서 위로 스크롤
+// ════════════════════════════════════════════════════════════
+async function runCreditsScene(scene) {
+  hideOverlay();
+  hideEnding();
+  // 검은 배경만 남기고 영상은 정지 (마지막 프레임 안 남게)
+  vA.pause(); vB.pause();
+  vA.classList.remove('active');
+  vB.classList.remove('active');
+
+  const screen = document.getElementById('creditsScreen');
+  const restartBtn = document.getElementById('creditsRestartBtn');
+
+  screen.innerHTML = `<div class="credits-roll" id="creditsRoll">${buildCreditsHtml(scene)}</div>`;
+  const roll = document.getElementById('creditsRoll');
+  const durationMs = scene.duration || 70000;
+  roll.style.animationDuration = `${durationMs}ms`;
+  screen.classList.add('show');
+
+  // 스크롤 완료 시 다시 시작 버튼 노출
+  roll.addEventListener('animationend', () => {
+    restartBtn.classList.add('show');
+  }, { once: true });
+
+  await set(stateRef, { scene_id: '', type: 'credits', phase: 'idle', updated_at: Date.now() });
+}
+
+function hideCredits() {
+  const screen = document.getElementById('creditsScreen');
+  const restartBtn = document.getElementById('creditsRestartBtn');
+  if (screen) {
+    screen.classList.remove('show');
+    screen.innerHTML = '';
+  }
+  if (restartBtn) restartBtn.classList.remove('show');
+}
+
+function buildCreditsHtml(scene) {
+  // 실시간 참가자 닉네임 — currentUsers 가 { userId: { nickname, ... } } 가정
+  const usersArr = Object.values(currentUsers || {});
+  const nicknames = usersArr
+    .map(u => (u && (u.nickname || u.name)) || '')
+    .filter(Boolean);
+
+  // 7-3 탭 통계 (있으면)
+  let topTappers = [];
+  let tapTotal = 0;
+  if (qteBurstFinalStats) {
+    const entries = Object.entries(qteBurstFinalStats).filter(([, c]) => c > 0);
+    topTappers = entries.sort((a, b) => b[1] - a[1]).slice(0, 5);
+    tapTotal = entries.reduce((sum, [, c]) => sum + (c || 0), 0);
+  }
+
+  const castHtml = nicknames.length
+    ? nicknames.map(n => `<div class="row">${escapeHtml(n)}</div>`).join('')
+    : `<div class="row" style="color:var(--muted)">참가자 정보 없음</div>`;
+
+  const tapStatsHtml = topTappers.length ? `
+    <section>
+      <h3>Tapping MVP</h3>
+      ${topTappers.map(([name, count]) => `
+        <div class="row">${escapeHtml(name)}<span class="cnt">${count}</span></div>
+      `).join('')}
+    </section>
+    <section>
+      <h3>Total Clicks</h3>
+      <div class="big-stat">${tapTotal.toLocaleString()}</div>
+    </section>
+  ` : '';
+
+  const producers = scene.producers || [];
+  const producersHtml = producers.map(p => `<div class="row">${escapeHtml(p)}</div>`).join('');
+
+  return `
+    <h1>${escapeHtml(scene.title || '🎬 The End')}</h1>
+    <div class="subtitle">${escapeHtml(scene.subtitle || '')}</div>
+
+    <section>
+      <h3>Cast</h3>
+      ${castHtml}
+    </section>
+
+    ${tapStatsHtml}
+
+    <section>
+      <h3>Produced By</h3>
+      ${producersHtml}
+    </section>
+
+    <section>
+      <h3>Supervised By</h3>
+      <div class="row">${escapeHtml(scene.supervisor || '')}</div>
+    </section>
+
+    <section>
+      <h3>${escapeHtml(scene.course || '')}</h3>
+      <div class="closing">${escapeHtml(scene.closing || '')}</div>
+    </section>
+  `;
+}
+
 function waitForDuration(video) {
   return new Promise(resolve => {
     if (video.duration && !isNaN(video.duration) && isFinite(video.duration)) return resolve();
@@ -668,6 +1625,42 @@ function waitForDuration(video) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Firebase 는 undefined 키를 거부하므로 정의된 필드만 골라서 페이로드 구성
+function buildOverlayPayload(overlay) {
+  const p = { prompt: overlay.prompt || '' };
+  if (overlay.options) {
+    p.options = overlay.options;
+  } else if (overlay.type === 'ox') {
+    p.options = ['O', 'X'];
+  }
+  if (overlay.tap_target_per_user !== undefined) p.tap_target_per_user = overlay.tap_target_per_user;
+  if (overlay.tap_target_total !== undefined) p.tap_target_total = overlay.tap_target_total;
+  // map_align 전용 필드 전달 — 청중 폰 audience.html 에서 사용
+  if (overlay.type === 'map_align') {
+    p.map_src        = overlay.map_src        || 'map.png';
+    p.omap_src       = overlay.omap_src       || 'omap.png';
+    p.target_x_pct   = overlay.target_x_pct   ?? 50;
+    p.target_y_pct   = overlay.target_y_pct   ?? 50;
+    p.tolerance_pct  = overlay.tolerance_pct  ?? 4;
+    p.start_dx_pct   = overlay.start_dx_pct   ?? 22;
+    p.start_dy_pct   = overlay.start_dy_pct   ?? -14;
+    p.winners_needed = overlay.winners_needed ?? 3;
+  }
+  // manual 전용 — 청중에게는 안내 문구만, 진행자가 메인에서 수동 진행
+  if (overlay.type === 'manual') {
+    p.advance_label = overlay.advance_label || '✓ 다음 진행';
+  }
+  // match3 전용 필드 전달 — 청중 폰에서 게임 구동
+  if (overlay.type === 'match3') {
+    p.dangers        = overlay.dangers        || ['🔫', '🔪', '🏏'];
+    p.safes          = overlay.safes          || ['🍎', '🍋', '🍇', '🍓', '🌸'];
+    p.rows           = overlay.rows           || 7;
+    p.cols           = overlay.cols           || 6;
+    p.winners_needed = overlay.winners_needed ?? 3;
+  }
+  return p;
+}
 
 // ════════════════════════════════════════════════════════════
 // inputs 구독 & 집계
@@ -681,6 +1674,16 @@ function subscribeToInputs(scene_id, overlayDef) {
       const tally = aggregateInputs(overlayDef.type, currentInputs);
       const opts = overlayDef.options || (overlayDef.type === 'ox' ? ['O','X'] : []);
       renderOverlay(opts, tally, overlayDef, false);
+    }
+    // map_align / match3: 선착순 N명 완성 시 타이머 즉시 종료 → 다음 단계로
+    if (overlayDef.type === 'map_align' || overlayDef.type === 'match3') {
+      const needed = overlayDef.winners_needed ?? 3;
+      const successKey = overlayDef.type === 'map_align' ? 'aligned' : 'eliminated';
+      const successCount = Object.values(currentInputs).filter(i => i?.input?.[successKey]).length;
+      if (successCount >= needed && overlayTimerDurationMs > 0) {
+        console.log(`  ${overlayDef.type}: ${successCount}/${needed} 완성 → 조기 종료`);
+        stopOverlayTimer();
+      }
     }
   });
 }
@@ -742,6 +1745,7 @@ onValue(ref(db, '.info/connected'), (snap) => {
 // ════════════════════════════════════════════════════════════
 async function startGame() {
   document.getElementById('startScreen').classList.add('hide');
+  document.getElementById('devControls').classList.add('active');
   // 청중 입력 초기화
   await remove(ref(db, 'inputs'));
   // 시작 씬 재생
@@ -750,8 +1754,12 @@ async function startGame() {
 
 window.restartGame = async function() {
   document.getElementById('restartBtn').style.display = 'none';
+  document.getElementById('devControls').classList.remove('active');
+  document.getElementById('gameOverScreen').classList.remove('show');
   hideEnding();
   hideOverlay();
+  hideCredits();
+  qteBurstFinalStats = null;
   vA.pause(); vB.pause();
   vA.src = ''; vB.src = '';
   vA.classList.remove('active');
@@ -764,6 +1772,24 @@ window.restartGame = async function() {
 
 document.getElementById('startBtn').onclick = startGame;
 document.getElementById('restartBtn').onclick = window.restartGame;
+document.getElementById('creditsRestartBtn').onclick = window.restartGame;
+
+// ────────────────────────────────────────────────
+// 진행자 컨트롤 와이어업
+// ────────────────────────────────────────────────
+document.getElementById('skipVideoBtn').onclick = () => {
+  // 현재 active 영상의 currentTime 을 끝으로 점프
+  //   - playUntilFreeze 의 RAF 모니터가 freezeAt 으로 catch 해서 pause + resolve
+  //   - playToEnd 는 'ended' 이벤트 발화로 resolve
+  if (!activeVideo) return;
+  const dur = activeVideo.duration;
+  if (dur && isFinite(dur)) {
+    try { activeVideo.currentTime = Math.max(0, dur - 0.1); } catch(e) { console.warn('skip failed', e); }
+  }
+};
+document.getElementById('shave5Btn').onclick = () => shaveOverlayTimer(5000);
+document.getElementById('shave10Btn').onclick = () => shaveOverlayTimer(10000);
+document.getElementById('endVoteBtn').onclick = () => shaveOverlayTimer(99999999);
 
 // ════════════════════════════════════════════════════════════
 // 유틸

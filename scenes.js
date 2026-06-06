@@ -1,73 +1,522 @@
 // ════════════════════════════════════════════════════════════
-// scenes.js — 게임 흐름 정의
+// scenes.js — Interactive Storytelling 기말 프로젝트
 //
-// 이 파일만 수정하면 게임 시나리오를 바꿀 수 있어요.
-// main.html 엔진 코드는 안 건드려도 됩니다.
+// 영상은 videos/ 폴더에 원본 파일명 그대로 두면 됩니다.
+// 미니게임 부분은 일단 단순 선택지 (choice_only) 로 placeholder 처리.
+// 추후 진짜 게임 컴포넌트로 교체 가능.
 // ════════════════════════════════════════════════════════════
 
-window.START_SCENE = 'start';
+window.START_SCENE = 's01_intro';
 
 window.SCENES = {
 
-  // 첫 씬: 예시 영상 1개 + 끝 부근 슬로우 → 프리징 → 선택지
-  start: {
+  // ════════════════════════════════════════════════════════════
+  // 1장 ~ 2장 — 세계관 + 군대 침입
+  // ════════════════════════════════════════════════════════════
+  's01_intro': {
     type: 'video',
-    src: 'videos/example.mp4',
-
-    // 영상이 끝나기 N초 전부터 슬로우 시작 (= 결정 지점)
-    // 정확한 시점을 쓰려면 freeze_at 사용 (둘 중 하나만)
-    freeze_before_end: 3.0,
-    // freeze_at: 8.5,           // 또는 8.5초 지점에 정확히 프리징
-
-    // 슬로우 → 완전 정지까지 걸리는 시간(초). 시각 효과용
-    slow_duration: 2.0,
-
-    // freeze 후 표시될 오버레이 (청중 폰에도 자동 전송)
+    src: 'videos/1) 세계관 설명, 2-1)군대 침입.mp4',
+    freeze_before_end: 1.0,
+    slow_duration: 0.5,
     overlay: {
       type: 'choice',
-      prompt: '어떻게 할까?',
-      options: ['🔥 강행한다', '🌿 물러난다'],
-      duration: 10000           // 청중 투표 시간 (ms)
+      prompt: '쿵쿵쿵... 무슨 소리지?',
+      options: ['재빨리 정리한다', '밖으로 나간다', '가만히 있는다'],
+      duration: 15000
     },
-
-    // 투표 결과 → 다음 씬으로 분기
+    // 세 선택지 모두 같은 다음 씬으로 (스토리 분기 없음)
     next: {
-      '🔥 강행한다': 'ending_a',
-      '🌿 물러난다': 'ending_b',
-      default: 'ending_a'       // 무투표 시 기본 결말
+      '재빨리 정리한다': 's03_meeting',
+      '밖으로 나간다': 's03_meeting',
+      '가만히 있는다': 's03_meeting',
+      default: 's03_meeting'
     }
   },
 
-  // ─── 결말 A ───
-  ending_a: {
-    type: 'ending',
-    title: '결말 A',
-    subtitle: '강행의 길',
-    description: '용기 있는 자만이 다다를 수 있는 결말이다.',
-    color: '#00d68f',           // 강조 색
-    // src: 'videos/ending_a.mp4',   // 결말 영상 있으면 추가
+  // ════════════════════════════════════════════════════════════
+  // 3장 — 교수님 연행 + 회의 시작
+  // ════════════════════════════════════════════════════════════
+  's03_meeting': {
+    type: 'video',
+    src: 'videos/2-2)교수님 연행, 3-1) 회의 시작.mp4',
+    freeze_before_end: 1.0,
+    slow_duration: 0.5,
+    overlay: {
+      type: 'choice',
+      prompt: '교실에 남겨진 우리. 어떻게 할까?',
+      options: ['맨몸으로 뛰쳐나간다', '일단 더 생각해보자'],
+      duration: 15000
+    },
+    // b 가 정답이지만 어떤 걸 골라도 결국 고양이가 등장
+    next: {
+      '맨몸으로 뛰쳐나간다': 's04_cat',
+      '일단 더 생각해보자': 's04_cat',
+      default: 's04_cat'
+    }
   },
 
-  // ─── 결말 B ───
-  ending_b: {
-    type: 'ending',
-    title: '결말 B',
-    subtitle: '신중함의 길',
-    description: '살아남은 자에게 또 다른 기회가 찾아온다.',
-    color: '#ff3d71',
-    // src: 'videos/ending_b.mp4',
-  }
+  // ════════════════════════════════════════════════════════════
+  // 4장 — 고양이 등장 + 미완성 지도
+  // ════════════════════════════════════════════════════════════
+  's04_cat': {
+    type: 'video',
+    src: 'videos/4)고양이등장,5-1)미완성 지도 등장.mp4',
+    next: 's05_map_game'   // 영상 끝나면 자동으로 지도 게임으로
+  },
+
+  // 미니게임: 두 지도(map + omap)를 정확히 겹쳐 완성
+  // 청중 폰에서 omap 을 드래그해서 map 위에 정확히 정렬하면 성공
+  // ★ 선착순 N명이 완성하면 게임 즉시 종료 + 완성자 명단 공개
+  's05_map_game': {
+    type: 'choice_only',
+    overlay: {
+      type: 'map_align',
+      prompt: '🗺️ 두 지도를 정확히 겹쳐라 · 선착순 3명!',
+      // GitHub 저장소 루트(=audience.html 옆) 에 이 두 파일을 올려두면 됨
+      map_src: 'map.png',
+      omap_src: 'omap.png',
+      // 선착순 몇 명이 완성하면 성공으로 칠지
+      winners_needed: 3,
+      // omap 의 정답 위치 (스테이지 폭/높이 % · 50,50 = 정중앙 = map 과 완전히 일치)
+      target_x_pct: 50,
+      target_y_pct: 50,
+      // 정답으로 인정할 허용 오차 (%)  ← 너무 어려우면 6~8 로, 너무 쉬우면 2~3 으로
+      tolerance_pct: 4,
+      // 시작 시 정답에서 얼마나 벗어나서 시작할지 (%)  ← 게임 난이도 조절
+      start_dx_pct: 22,
+      start_dy_pct: -14,
+      duration: 30000
+    },
+    next: { success: 's05_complete', default: 's05_complete' }
+  },
 
   // ════════════════════════════════════════════════════════════
-  // 더 추가하려면:
-  //
-  // s02_chase: {
-  //   type: 'video',
-  //   src: 'videos/chase.mp4',
-  //   freeze_before_end: 2,
-  //   slow_duration: 1.5,
-  //   overlay: { type: 'qte', prompt: '⚡ 점프!', duration: 2000, threshold: 0.5 },
-  //   next: { success: 's03_safe', fail: 's03_fall' }
-  // }
+  // 5장 — 지도 완성 + 타워 진입
   // ════════════════════════════════════════════════════════════
+  's05_complete': {
+    type: 'video',
+    src: 'videos/5-2)지도완성 부터 6-1) 캡슐 떨군 것까지.mp4',
+    // 영상에 캡슐 떨어지는 장면까지 포함됐다고 가정
+    next: 's06_1_decision'
+  },
+
+  // ════════════════════════════════════════════════════════════
+  // 6장 — 머리의 방
+  // ════════════════════════════════════════════════════════════
+  // 6-1) 캡슐 떨어짐, 어떻게 할까?
+  's06_1_decision': {
+    type: 'choice_only',
+    overlay: {
+      type: 'choice',
+      prompt: '캡슐이 굴러갔다. 우리의 소중한 추억인데..',
+      options: ['구하러 간다', '모른 척 한다', '조력자에게 도움 요청'],
+      duration: 15000
+    },
+    next: {
+      '구하러 간다': 's06_1_hero',
+      '모른 척 한다': 's06_1_ignore',
+      '조력자에게 도움 요청': 's06_1_helper',
+      default: 's06_1_hero'
+    }
+  },
+
+  // 6-1 A) 주인공이 구하러 감 → 구출 성공
+  's06_1_hero': {
+    type: 'video',
+    src: 'videos/6-1-1 주인공이 구하러 감 .mp4',
+    next: 's06_2_decision'
+  },
+
+  // 6-1 B) 모른 척 → 조력자가 비난, 신뢰도 하락 → 6-3 로 바로 (6-2 시선분산 스킵)
+  's06_1_ignore': {
+    type: 'video',
+    src: 'videos/6-1-3 가지러 가지 않음.mp4',
+    next: 's06_3_pre'
+  },
+
+  // 6-1 C) 조력자가 구하러 감 → 구출 성공, 부상
+  's06_1_helper': {
+    type: 'video',
+    src: 'videos/6-1-2 조력자가 구하러 감.mp4',
+    next: 's06_2_decision'
+  },
+
+  // 6-2) 사이렌 — 시선 분산 결정
+  's06_2_decision': {
+    type: 'video',
+    src: 'videos/6-2 시선 분산 할지 말지.mp4',
+    freeze_before_end: 0.3,
+    slow_duration: 0.1,
+    overlay: {
+      type: 'choice',
+      prompt: '사이렌이 울렸다. 어떻게 이동할까?',
+      options: ['그룹을 나눠 시선 분산', '일단 다 같이 간다'],
+      duration: 10000
+    },
+    next: {
+      '그룹을 나눠 시선 분산': 's06_2_split',
+      '일단 다 같이 간다': 's06_2_together',
+      default: 's06_2_split'
+    }
+  },
+
+  's06_2_split': {
+    type: 'video',
+    src: 'videos/6-2 시선 분산 함.mp4',
+    next: 's06_3_pre'
+  },
+
+  's06_2_together': {
+    type: 'video',
+    src: 'videos/6-2 시선 분산안함.mp4',
+    next: 's06_3_pre'
+  },
+
+  // 6-3) 머리의 방 - 컴퓨터 논리 파괴
+  's06_3_pre': {
+    type: 'video',
+    src: 'videos/6-3 머리방 게임 시작 전.mp4',
+    next: 's06_3_game'
+  },
+
+  // 미니게임: 논리 파괴 (3번 반복) — TODO: 실제 게임 컴포넌트
+  's06_3_game': {
+    type: 'choice_only',
+    overlay: {
+      type: 'choice',
+      prompt: '💻 논리 FILE:"아기는 귀엽다/여름엔 덥다/ ___"',
+      options: ['햄버거 좋아하는 이순신', '강아지 좋아하는 강형욱'],
+      duration: 10000
+    },
+    next: {
+      '햄버거 좋아하는 이순신': 's06_3_done',
+      '강아지 좋아하는 강형욱': 's06_3_done',
+      default: 's06_3_done'
+    }
+  },
+
+  's06_3_done': {
+    type: 'video',
+    src: 'videos/6-3 머리방 게임 클리어.mp4',
+    next: 's07_1_blackout'
+  },
+
+  // ════════════════════════════════════════════════════════════
+  // 7장 — 장의 방 (군사 처벌 시스템)
+  // ════════════════════════════════════════════════════════════
+  // 7-1) 암전
+  's07_1_blackout': {
+    type: 'video',
+    src: 'videos/7-1 암전.mp4',
+    freeze_before_end: 1.0,
+    slow_duration: 0.5,
+    overlay: {
+      type: 'choice',
+      prompt: '앞이 보이지 않는다.',
+      options: ['서로 어깨를 잡고 이동', '고양이의 도움'],
+      duration: 10000
+    },
+    next: {
+      '서로 어깨를 잡고 이동': 's07_1a',
+      '고양이의 도움': 's07_1b',
+      default: 's07_1a'
+    }
+  },
+
+  's07_1a': {
+    type: 'video',
+    src: 'videos/7-1-1 암전 속 서로의 어깨를 잡으며 이동함.mp4',
+    next: 's07_2_door'
+  },
+
+  's07_1b': {
+    type: 'video',
+    src: 'videos/7-1-2 고양이 눈 손전등.mp4',
+    next: 's07_2_door'
+  },
+
+  // 7-2) 댐핑 - 타이밍 미니게임 (중간 pause 필요)
+  // TODO: freeze_at 정확한 시점 확인 필요
+  's07_2_door': {
+    type: 'video',
+    src: 'videos/7-2 탭핑(중간에 pause 필요).mp4',
+    // 영상 정중앙쯤 멈추도록 임시 설정 — 실제 영상 보고 조정
+    freeze_at: 16.0,
+    slow_duration: 0.3,
+    resume_after_overlay: true,  // 탭 단계 끝난 후 멈춘 지점부터 영상 끝까지 재생
+    overlay: {
+      type: 'choice',
+      prompt: '⏰ 타이밍을 맞춰 문을 통과하라!',
+      options: ['지금!'],
+      duration: 2500,
+      result_mode: 'success_fail',   // 옵션 막대 대신 성공/실패 패널 표시
+      success_threshold: 1,          // 한 명이라도 누르면 성공
+      success_text: '통과!',
+      fail_text: '통과 실패...'
+    },
+    next: { success: 's07_3_robot', fail: 'gameover_door' }
+  },
+
+  // 7-2 실패 → GAME OVER → 7-2 재시도
+  'gameover_door': {
+    type: 'gameover',
+    sub: '문을 통과하지 못했습니다',
+    duration: 3500,
+    next: 's07_2_door'
+  },
+
+  // 7-3) 광클로 군사 로봇 5개 파괴 (QTE 연타)
+  's07_3_robot': {
+    type: 'video',
+    src: 'videos/7-3 로봇 죽이기 탭핑(중간에 pause 필요).mp4',
+    freeze_at: 6.0,   // TODO: 실제 영상 보고 조정
+    slow_duration: 0.5,
+    resume_after_overlay: true,  // 연타 끝난 후 멈춘 지점부터 영상 끝까지 재생
+    overlay: {
+      type: 'qte_burst',
+      prompt: '💥 합심해서 300회 두드려 시스템을 파괴하라!',
+      tap_target_total: 30,
+      tap_target_per_user: 100,
+      duration: 10000,
+      result_mode: 'success_fail',
+      success_threshold: 30,        // 누적 탭 300 이상이면 성공
+      success_text: '시스템 파괴 성공!',
+      fail_text: '시스템 파괴 실패'
+    },
+    next: { success: 's08_1_enter', fail: 'gameover_robot' }
+  },
+
+  // 7-3 실패 → GAME OVER → 7-3 재시도
+  'gameover_robot': {
+    type: 'gameover',
+    sub: '시스템 파괴 실패',
+    duration: 3500,
+    next: 's07_3_robot'
+  },
+
+  // ════════════════════════════════════════════════════════════
+  // 8장 — 가슴의 방 (감정 억제 칩)
+  // ════════════════════════════════════════════════════════════
+  // 8-1) 입성 — 과한 감정 선택
+  's08_1_enter': {
+    type: 'video',
+    src: 'videos/8-1 가슴의 방_입성.mp4',
+    freeze_before_end: 0.8,
+    slow_duration: 0.5,
+    overlay: {
+      type: 'choice',
+      prompt: '😵‍💫 과한 감정이 몰려온다. 어떤 감정에 휩쓸릴까?',
+      options: ['😡 분노', '😱 두려움', '🍺 쾌락'],
+      duration: 12000
+    },
+    next: {
+      '😡 분노': 's08_1_anger',
+      '😱 두려움': 's08_1_fear',
+      '🍺 쾌락': 's08_1_pleasure',
+      default: 's08_1_anger'
+    }
+  },
+
+  's08_1_anger': {
+    type: 'video',
+    src: 'videos/8-1 가슴의 방_분노.mp4',
+    next: 's08_1_resolve'
+  },
+
+  's08_1_fear': {
+    type: 'video',
+    src: 'videos/8-1 가슴의 방_두려움.mp4',
+    next: 's08_1_resolve'
+  },
+
+  's08_1_pleasure': {
+    type: 'video',
+    src: 'videos/8-1 가슴의 방_쾌락.mp4',
+    next: 's08_1_resolve'
+  },
+
+  // 8-1 후속 — 고양이가 의문 제기, 위험 요소 찾기 시작
+  's08_1_resolve': {
+    type: 'video',
+    src: 'videos/8-1 가슴의 방_괴로움 해결(게임시작).mp4',
+    next: 's08_2_hidden'
+  },
+
+  // 8-2) 위험요소 찾기 — Match-3 미니게임 (애니팡 / 캔디크러쉬 스타일)
+  //   인접한 두 타일을 탭해서 자리 바꿈 → 같은 이모지 3개 가로/세로로 일렬 시 제거
+  //   🔫 🔪 🏏 각각 최소 1번씩 매칭 성공시키면 미션 클리어
+  //   선착순 3명이 클리어하면 즉시 다음 씬으로
+  's08_2_hidden': {
+    type: 'choice_only',
+    overlay: {
+      type: 'match3',
+      prompt: '🔍 위험 요소를 모두 없애라 (🔫 🔪 🏏)',
+      dangers: ['🔫', '🔪', '🏏'],     // 제거해야 할 위험 요소
+      safes:   ['🍎', '🍋', '🍇', '🍓', '🌸'],  // 무난한 채움용 이모지
+      rows: 7,
+      cols: 6,
+      winners_needed: 3,                // 선착순 N명이 클리어하면 미션 성공
+      duration: 60000                   // 1분 제한 (선착순 다 채워지면 조기 종료)
+    },
+    next: { success: 's08_2_calm', default: 's08_2_calm' }
+  },
+
+  // 8-3) 위험요소 파괴 후 진정 → 인질극 직전
+  //     (USB 선택지는 8-4 영상 뒤로 이동했음)
+  's08_2_calm': {
+    type: 'video',
+    src: 'videos/8-2(원래는 4)_인질극 직전.mp4',
+    next: 's08_3_branch'
+  },
+
+  // 6-1 의 선택에 따라 8-4 a 또는 8-4 b 로 분기
+  //   '구하러 간다' / '모른 척 한다'   → 8-4 a (주인공이 직접 캡슐 가져온 흐름)
+  //   '조력자에게 도움 요청'           → 8-4 b (조력자가 캡슐 가져온 흐름)
+  's08_3_branch': {
+    type: 'branch',
+    if_choice_from: 's06_1_decision',
+    next: {
+      '구하러 간다':         's08_3a',
+      '모른 척 한다':         's08_3a',
+      '조력자에게 도움 요청': 's08_3b',
+      default:               's08_3a'
+    }
+  },
+
+  // 8-4 A) 영상 후 USB 선택지
+  's08_3a': {
+    type: 'video',
+    src: 'videos/8-4 a.mp4',
+    freeze_before_end: 1.0,
+    slow_duration: 0.5,
+    overlay: {
+      type: 'choice',
+      prompt: '🤖 로봇: "조력자를 살리려면 USB를 내놔라"',
+      options: ['💾 USB 를 넘긴다 (조력자 구출)', '⚔️ 조력자를 포기한다 (USB 사수)'],
+      duration: 15000
+    },
+    next: {
+      '💾 USB 를 넘긴다 (조력자 구출)': 's08_5_rescue',
+      '⚔️ 조력자를 포기한다 (USB 사수)': 's08_5_giveup',
+      default: 's08_5_rescue'
+    }
+  },
+
+  // 8-4 B) 영상 후 동일한 USB 선택지
+  's08_3b': {
+    type: 'video',
+    src: 'videos/8-4 b.mp4',
+    freeze_before_end: 1.0,
+    slow_duration: 0.5,
+    overlay: {
+      type: 'choice',
+      prompt: '🤖 로봇: "조력자를 살리려면 USB를 내놔라"',
+      options: ['💾 USB 를 넘긴다 (조력자 구출)', '⚔️ 조력자를 포기한다 (USB 사수)'],
+      duration: 15000
+    },
+    next: {
+      '💾 USB 를 넘긴다 (조력자 구출)': 's08_5_rescue',
+      '⚔️ 조력자를 포기한다 (USB 사수)': 's08_5_giveup',
+      default: 's08_5_rescue'
+    }
+  },
+
+  // (예전 's08_4_give_usb' / 's08_4_sacrifice' 는 8-4 a/b 영상이 위로 이동하면서
+  //  더 이상 도달하지 않게 됨 → 제거)
+
+  // 8-5) A 루트: 인질 구출, USB 없음... 그러나 고양이가 복제본 숨겨둠
+  //   13초 시점에서 영상 정지 → 청중이 실제로 USB 찾기 → 진행자가 "✓ 찾았다" 누르면 이어 재생
+  's08_5_rescue': {
+    type: 'video',
+    src: 'videos/8-5 인질 구출(usb 찾을때 pause).mp4',
+    freeze_at: 13.0,
+    slow_duration: 0.5,
+    resume_after_overlay: true,   // 성공 누르면 영상 끝까지 이어서 재생
+    overlay: {
+      type: 'manual',              // 청중 입력 없이 진행자가 수동으로 진행
+      prompt: '🔎 청중이 실제 USB 를 찾는 중...',
+      advance_label: '✓ 찾았다 — 영상 이어서 재생',
+      duration: 999999             // 자동 만료 안 되도록 큰 값 (실제로는 수동 종료)
+    },
+    next: { default: 's09_villain_before' }
+  },
+
+  // 8-5 B 루트: 조력자 사망 보여줌 → 9-1
+  's08_5_giveup': {
+    type: 'video',
+    src: 'videos/8-5 인질 포기.mp4',
+    next: 's09_villain_before'
+  },
+
+  // ════════════════════════════════════════════════════════════
+  // 9장 — 중앙제어 시스템 (흑막)
+  // ════════════════════════════════════════════════════════════
+  // 9-1) 흑막 등장, USB 꽂을지 결정
+  's09_villain_before': {
+    type: 'video',
+    src: 'videos/흑막 스토리_usb 꽂기전.mp4',
+    freeze_before_end: 1.0,
+    slow_duration: 0.5,
+    overlay: {
+      type: 'choice',
+      prompt: '🎯 어떻게 할까?',
+      options: ['💾 USB 를 꽂는다', '🤔 USB 를 꽂지 않는다'],
+      duration: 15000
+    },
+    // B 를 골라도 결국 A 로 가게 만듦 (강제 분기)
+    next: {
+      '💾 USB 를 꽂는다': 's09_villain_after',
+      '🤔 USB 를 꽂지 않는다': 's09_villain_after',
+      default: 's09_villain_after'
+    }
+  },
+
+  // 9-2) USB 꽂은 후 — 흑막이 권총을 머리에 조준
+  's09_villain_after': {
+    type: 'video',
+    src: 'videos/흑막 스토리_usb 꽂고 난 후_ 설득하냐마냐.mp4',
+    freeze_before_end: 1.0,
+    slow_duration: 0.5,
+    overlay: {
+      type: 'choice',
+      prompt: '🔫 흑막이 방아쇠를 당기려 한다',
+      options: ['🚷 섣불리 나서지 않는다', '🗣️ 흑막을 설득한다'],
+      duration: 15000
+    },
+    next: {
+      '🚷 섣불리 나서지 않는다': 'ending_die',
+      '🗣️ 흑막을 설득한다': 'ending_stop',
+      default: 'ending_die'
+    }
+  },
+
+  // ════════════════════════════════════════════════════════════
+  // 엔딩
+  // ════════════════════════════════════════════════════════════
+  // 엔딩 1: 흑막 자살
+  'ending_die': {
+    type: 'video',
+    src: 'videos/말리지 않는 엔딩.mp4',
+    next: 'final_credits'
+  },
+
+  // 엔딩 2: 흑막 설득 성공
+  'ending_stop': {
+    type: 'video',
+    src: 'videos/말리는 엔딩.mp4',
+    next: 'final_credits'
+  },
+
+  // 최종 크레딧 — 영화 엔딩 크레딧처럼 아래에서 위로 스크롤
+  'final_credits': {
+    type: 'credits',
+    duration: 70000,          // 70초에 걸쳐 스크롤
+    title: '🎬 The End',
+    subtitle: '함께 만든 이야기',
+    producers: ['천하람', '차예령', '김찬영', '최상빈'],
+    supervisor: '주연경 교수님',
+    course: 'INTERACTIVE STORYTELLING',
+    closing: '2025-1 수강생들\n한 학기 동안 수고 많으셨습니다 ✨'
+  }
+
 };
