@@ -72,6 +72,16 @@ window.SCENES = {
     overlay: {
       type: 'map_align',
       prompt: '🗺️ 두 지도를 정확히 겹쳐라 · 선착순 3명!',
+      // ★ 게임 시작 전 안내 — 진행자가 시작 버튼 누를 때까지 대기
+      pre_intro: {
+        title: '🗺️ 두 지도를 합쳐라',
+        description: [
+          '청중 각자의 폰에 두 장의 지도가 보입니다',
+          '빨간 지도(위)를 손가락으로 드래그해서 아래 지도와 정확히 겹쳐 보세요',
+          '선착순 3명이 정렬에 성공하면 미션 클리어!'
+        ],
+        button_label: '🗺️ 지도 정렬 시작'
+      },
       // GitHub 저장소 루트(=audience.html 옆) 에 이 두 파일을 올려두면 됨
       map_src: 'map.png',
       omap_src: 'omap.png',
@@ -97,12 +107,20 @@ window.SCENES = {
     type: 'video',
     src: 'videos/5-2)지도완성 부터 6-1) 캡슐 떨군 것까지.mp4',
     // 영상에 캡슐 떨어지는 장면까지 포함됐다고 가정
-    next: 's06_1_decision'
+    next: 'chapter6_title'
   },
 
   // ════════════════════════════════════════════════════════════
   // 6장 — 머리의 방
   // ════════════════════════════════════════════════════════════
+  // 챕터 타이틀 카드 — 진행자가 클릭할 때까지 대기
+  'chapter6_title': {
+    type: 'chapter_title',
+    chapter_label: '제 6장',
+    title: '머리의 방',
+    next: 's06_1_decision'
+  },
+
   // 6-1) 캡슐 떨어짐, 어떻게 할까?
   's06_1_decision': {
     type: 'choice_only',
@@ -198,12 +216,19 @@ window.SCENES = {
   's06_3_done': {
     type: 'video',
     src: 'videos/6-3 머리방 게임 클리어.mp4',
-    next: 's07_1_blackout'
+    next: 'chapter7_title'
   },
 
   // ════════════════════════════════════════════════════════════
   // 7장 — 장의 방 (군사 처벌 시스템)
   // ════════════════════════════════════════════════════════════
+  'chapter7_title': {
+    type: 'chapter_title',
+    chapter_label: '제 7장',
+    title: '장의 방',
+    next: 's07_1_blackout'
+  },
+
   // 7-1) 암전
   's07_1_blackout': {
     type: 'video',
@@ -275,6 +300,15 @@ window.SCENES = {
     overlay: {
       type: 'qte_burst',
       prompt: '💥 합심해서 300회 두드려 시스템을 파괴하라!',
+      pre_intro: {
+        title: '💥 시스템 파괴 — 합심 연타',
+        description: [
+          '제한시간 10초 안에 모두 합쳐서 화면을 300번 두드려야 합니다',
+          '버튼을 미친듯이 빠르게 연타하세요!',
+          '실패 시 GAME OVER — 다시 시도해야 합니다'
+        ],
+        button_label: '💥 연타 시작'
+      },
       tap_target_total: 30,
       tap_target_per_user: 100,
       duration: 10000,
@@ -283,7 +317,7 @@ window.SCENES = {
       success_text: '시스템 파괴 성공!',
       fail_text: '시스템 파괴 실패'
     },
-    next: { success: 's08_1_enter', fail: 'gameover_robot' }
+    next: { success: 'chapter8_title', fail: 'gameover_robot' }
   },
 
   // 7-3 실패 → GAME OVER → 7-3 재시도
@@ -297,6 +331,13 @@ window.SCENES = {
   // ════════════════════════════════════════════════════════════
   // 8장 — 가슴의 방 (감정 억제 칩)
   // ════════════════════════════════════════════════════════════
+  'chapter8_title': {
+    type: 'chapter_title',
+    chapter_label: '제 8장',
+    title: '가슴의 방',
+    next: 's08_1_enter'
+  },
+
   // 8-1) 입성 — 과한 감정 선택
   's08_1_enter': {
     type: 'video',
@@ -351,6 +392,17 @@ window.SCENES = {
     overlay: {
       type: 'match3',
       prompt: '🔍 위험 요소를 모두 없애라 (🔫 🔪 🏏)',
+      pre_intro: {
+        title: '🔍 위험요소 제거 — 매치 3',
+        description: [
+          '청중 각자의 폰에 이모지 그리드가 보입니다',
+          '인접한 두 타일을 스와이프 또는 두 번 탭해서 자리를 바꾸세요',
+          '같은 이모지 3개를 가로/세로 일렬로 만들면 제거됩니다',
+          '🔫 🔪 🏏 위험요소 3종류를 각각 한 번씩 매치해서 없애면 클리어!',
+          '선착순 3명이 클리어하면 미션 성공'
+        ],
+        button_label: '🔍 매치 게임 시작'
+      },
       dangers: ['🔫', '🔪', '🏏'],     // 제거해야 할 위험 요소
       safes:   ['🍎', '🍋', '🍇', '🍓', '🌸'],  // 무난한 채움용 이모지
       rows: 7,
@@ -438,19 +490,26 @@ window.SCENES = {
       advance_label: '✓ 찾았다 — 영상 이어서 재생',
       duration: 999999             // 자동 만료 안 되도록 큰 값 (실제로는 수동 종료)
     },
-    next: { default: 's09_villain_before' }
+    next: { default: 'chapter9_title' }
   },
 
   // 8-5 B 루트: 조력자 사망 보여줌 → 9-1
   's08_5_giveup': {
     type: 'video',
     src: 'videos/8-5 인질 포기.mp4',
-    next: 's09_villain_before'
+    next: 'chapter9_title'
   },
 
   // ════════════════════════════════════════════════════════════
   // 9장 — 중앙제어 시스템 (흑막)
   // ════════════════════════════════════════════════════════════
+  'chapter9_title': {
+    type: 'chapter_title',
+    chapter_label: '제 9장 · 최종',
+    title: '중앙제어 시스템',
+    next: 's09_villain_before'
+  },
+
   // 9-1) 흑막 등장, USB 꽂을지 결정
   's09_villain_before': {
     type: 'video',
@@ -510,12 +569,30 @@ window.SCENES = {
   // 최종 크레딧 — 영화 엔딩 크레딧처럼 아래에서 위로 스크롤
   'final_credits': {
     type: 'credits',
-    duration: 70000,          // 70초에 걸쳐 스크롤
+    duration: 90000,          // 90초에 걸쳐 스크롤 (메시지가 많아서 더 길게)
     title: '🎬 The End',
     subtitle: '함께 만든 이야기',
-    producers: ['천하람', '차예령', '김찬영', '최상빈'],
+    producers: ['천소람', '차예령', '김찬영', '최상빈'],
     supervisor: '주연경 교수님',
     course: 'INTERACTIVE STORYTELLING',
+    // 수강생/교수님 응원 메시지 — 크레딧에 함께 흘러감
+    messages: [
+      { name: '수아',     text: '어려운 수업 마지막까지 재밌게 마무리 하십시다.' },
+      { name: '강백호',   text: '화이팅' },
+      { name: '이제열',   text: '고생 많으셨어요!!' },
+      { name: '문지영',   text: '고생하셨습니다 이 수업을 통해 내손으로 만든 제작물들을 많이 얻을 수 있어서 너무 뿌듯했어용' },
+      { name: '류승민',   text: '고생많으셨습니다...' },
+      { name: '김승현',   text: '다양한 사람들의 머릿 속을 들여다볼 수 있는 시간이어서 흥미로웠습니다. 다들 수고하셨어요!' },
+      { name: '심은지',   text: '수업을 같이 듣는 모든 분들 너무 친절해서 좋았어요! 다들 행복하세요!' },
+      { name: '윤지현',   text: '개개인의 작품을 보면서 다양한 관점으로 생각할 수 있게 되었습니다. 감사합니다!' },
+      { name: '슌레이뇨', text: '다들 수고하셨고 기말고사 파이팅하세요!' },
+      { name: '최진성',   text: '15주 간 모두 수고했어요' },
+      { name: '김준희',   text: '창작이라는 수업을 처음 수강해봐서 많은 어려움이 있었지만, 살아가면서 해볼 수 없는 경험이었기에 나름 재밌게 수강했습니다.' },
+      { name: '안지원',   text: '저희학과에서 이렇게 다같이 응원하고, 분위기좋은 수업을 들을수있어서 좋았습니다.' },
+      { name: '휘엔',     text: '표현은 서툴렀지만 정말 즐거웠고 많이 배운 수업이었습니다. 모두 멋지셨습니다! 감사합니다.' },
+      { name: '이은서',   text: '화이팅입니다~!!' },
+      { name: '교수님',   text: '감사합니다' }
+    ],
     closing: '2025-1 수강생들\n한 학기 동안 수고 많으셨습니다 ✨'
   }
 
