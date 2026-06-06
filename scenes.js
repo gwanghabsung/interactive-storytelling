@@ -22,7 +22,7 @@ window.SCENES = {
       type: 'choice',
       prompt: '쿵쿵쿵... 무슨 소리지?',
       options: ['재빨리 정리한다', '밖으로 나간다', '가만히 있는다'],
-      duration: 15000
+      duration: 25000
     },
     // 세 선택지 모두 같은 다음 씬으로 (스토리 분기 없음)
     next: {
@@ -45,7 +45,7 @@ window.SCENES = {
       type: 'choice',
       prompt: '교실에 남겨진 우리. 어떻게 할까?',
       options: ['맨몸으로 뛰쳐나간다', '일단 더 생각해보자'],
-      duration: 15000
+      duration: 25000
     },
     // b 가 정답이지만 어떤 걸 골라도 결국 고양이가 등장
     next: {
@@ -95,31 +95,33 @@ window.SCENES = {
       // 시작 시 정답에서 얼마나 벗어나서 시작할지 (%)  ← 게임 난이도 조절
       start_dx_pct: 22,
       start_dy_pct: -14,
-      duration: 30000
+      duration: 40000
     },
     next: { success: 's05_complete', default: 's05_complete' }
   },
 
   // ════════════════════════════════════════════════════════════
-  // 5장 — 지도 완성 + 타워 진입
+  // 5장 — 지도 완성 + 타워 진입 → 그대로 6장(머리의 방) 입장까지 한 영상에 이어짐
+  // 1분 40초 시점에서 freeze → "제 6장 머리의 방" 카드 → 진행자 클릭 → 이어 재생
   // ════════════════════════════════════════════════════════════
   's05_complete': {
     type: 'video',
     src: 'videos/5-2)지도완성 부터 6-1) 캡슐 떨군 것까지.mp4',
-    // 영상에 캡슐 떨어지는 장면까지 포함됐다고 가정
-    next: 'chapter6_title'
+    freeze_at: 100.0,             // 1분 40초 = 100초
+    slow_duration: 0.5,
+    resume_after_overlay: true,   // 진행자 클릭 후 영상 끝까지 이어 재생
+    overlay: {
+      type: 'chapter_title',
+      chapter_label: '제 1장',
+      title: '머리의 방: 전략',
+      duration: 999999            // 자동 만료 안 됨 — 진행자 버튼이 종료 트리거
+    },
+    next: { default: 's06_1_decision' }
   },
 
   // ════════════════════════════════════════════════════════════
   // 6장 — 머리의 방
   // ════════════════════════════════════════════════════════════
-  // 챕터 타이틀 카드 — 진행자가 클릭할 때까지 대기
-  'chapter6_title': {
-    type: 'chapter_title',
-    chapter_label: '제 6장',
-    title: '머리의 방',
-    next: 's06_1_decision'
-  },
 
   // 6-1) 캡슐 떨어짐, 어떻게 할까?
   's06_1_decision': {
@@ -128,7 +130,7 @@ window.SCENES = {
       type: 'choice',
       prompt: '캡슐이 굴러갔다. 우리의 소중한 추억인데..',
       options: ['구하러 간다', '모른 척 한다', '조력자에게 도움 요청'],
-      duration: 15000
+      duration: 25000
     },
     next: {
       '구하러 간다': 's06_1_hero',
@@ -169,7 +171,7 @@ window.SCENES = {
       type: 'choice',
       prompt: '사이렌이 울렸다. 어떻게 이동할까?',
       options: ['그룹을 나눠 시선 분산', '일단 다 같이 간다'],
-      duration: 10000
+      duration: 20000
     },
     next: {
       '그룹을 나눠 시선 분산': 's06_2_split',
@@ -190,27 +192,54 @@ window.SCENES = {
     next: 's06_3_pre'
   },
 
-  // 6-3) 머리의 방 - 컴퓨터 논리 파괴
+  // 6-3) 머리의 방 — 컴퓨터 논리 파괴 미니게임
+  //   3라운드 동안 말도 안 되는 선택지로 컴퓨터 논리를 무너뜨림
+  //   각 라운드 성공시마다 게이지 줄어들면서 빨간 데미지 효과
+  //   3라운드 다 성공하면 미션 클리어
   's06_3_pre': {
     type: 'video',
     src: 'videos/6-3 머리방 게임 시작 전.mp4',
     next: 's06_3_game'
   },
 
-  // 미니게임: 논리 파괴 (3번 반복) — TODO: 실제 게임 컴포넌트
   's06_3_game': {
-    type: 'choice_only',
-    overlay: {
-      type: 'choice',
-      prompt: '💻 논리 FILE:"아기는 귀엽다/여름엔 덥다/ ___"',
-      options: ['햄버거 좋아하는 이순신', '강아지 좋아하는 강형욱'],
-      duration: 10000
+    type: 'logic_break',
+    quest_title: '🧠 퀘스트: 컴퓨터의 논리를 무너뜨려라',
+    description: {
+      title: '[논리 FILE]',
+      items: [
+        '아기는 귀엽다',
+        '여름에는 덥다.',
+        '____(입력하시오)____'
+      ]
     },
-    next: {
-      '햄버거 좋아하는 이순신': 's06_3_done',
-      '강아지 좋아하는 강형욱': 's06_3_done',
-      default: 's06_3_done'
-    }
+    round_duration: 15000,    // 라운드당 15초 투표
+    reveal_duration: 2200,    // 결과 공개 (데미지 애니메이션) 2.2초
+    pre_intro: {
+      title: '🧠 컴퓨터의 논리를 무너뜨려라',
+      description: [
+        '컴퓨터에게 말도 안 되는 선택지를 3번 입력해서 논리를 파괴해야 합니다',
+        '두 선택지 모두 말이 안 되니, 더 마음에 드는 쪽으로 자유롭게 투표!',
+        '한 라운드씩 더 다수표를 받은 선택지가 컴퓨터에 입력됩니다',
+        '3라운드 모두 진행하면 컴퓨터 시스템 다운!'
+      ],
+      button_label: '🧠 논리 파괴 시작'
+    },
+    rounds: [
+      {
+        question: '우리의 선택지는?',
+        options: ['🍔 햄버거 좋아하는 이순신', '🐕 강아지 좋아하는 강형욱']
+      },
+      {
+        question: '우리의 선택지는?',
+        options: ['🐜 층간소음 때문에 슬리퍼 신은 개미', '⛸️ 스케이트화를 신은 김연아']
+      },
+      {
+        question: '우리의 선택지는?',
+        options: ['🌈 무지개 부동산에서 집 장만', '📦 테무에서 집 장만']
+      }
+    ],
+    next: 's06_3_done'
   },
 
   's06_3_done': {
@@ -225,7 +254,7 @@ window.SCENES = {
   'chapter7_title': {
     type: 'chapter_title',
     chapter_label: '제 7장',
-    title: '장의 방',
+    title: '장의 방: 생존',
     next: 's07_1_blackout'
   },
 
@@ -239,7 +268,7 @@ window.SCENES = {
       type: 'choice',
       prompt: '앞이 보이지 않는다.',
       options: ['서로 어깨를 잡고 이동', '고양이의 도움'],
-      duration: 10000
+      duration: 25000
     },
     next: {
       '서로 어깨를 잡고 이동': 's07_1a',
@@ -273,7 +302,7 @@ window.SCENES = {
       type: 'choice',
       prompt: '⏰ 타이밍을 맞춰 문을 통과하라!',
       options: ['지금!'],
-      duration: 2500,
+      duration: 2000,
       result_mode: 'success_fail',   // 옵션 막대 대신 성공/실패 패널 표시
       success_threshold: 1,          // 한 명이라도 누르면 성공
       success_text: '통과!',
@@ -317,38 +346,39 @@ window.SCENES = {
       success_text: '시스템 파괴 성공!',
       fail_text: '시스템 파괴 실패'
     },
-    next: { success: 'chapter8_title', fail: 'gameover_robot' }
+    next: { success: 's08_1_enter', fail: 'gameover_robot' }
   },
 
   // 7-3 실패 → GAME OVER → 7-3 재시도
   'gameover_robot': {
     type: 'gameover',
     sub: '시스템 파괴 실패',
-    duration: 3500,
+    duration: 3000,
     next: 's07_3_robot'
   },
 
   // ════════════════════════════════════════════════════════════
   // 8장 — 가슴의 방 (감정 억제 칩)
+  //   8-1 영상 11초 시점에 챕터 카드 띄움 → 진행자 클릭 후 영상 이어 재생
   // ════════════════════════════════════════════════════════════
-  'chapter8_title': {
-    type: 'chapter_title',
-    chapter_label: '제 8장',
-    title: '가슴의 방',
-    next: 's08_1_enter'
-  },
-
   // 8-1) 입성 — 과한 감정 선택
   's08_1_enter': {
     type: 'video',
     src: 'videos/8-1 가슴의 방_입성.mp4',
+    // 영상 중 11초 시점에 챕터 카드 띄움 (선택지 freeze 와 별개)
+    chapter_card: {
+      freeze_at: 11.0,
+      chapter_label: '제 8장',
+      title: '가슴의 방: 감정',
+      slow_duration: 0.5
+    },
     freeze_before_end: 0.8,
     slow_duration: 0.5,
     overlay: {
       type: 'choice',
       prompt: '😵‍💫 과한 감정이 몰려온다. 어떤 감정에 휩쓸릴까?',
       options: ['😡 분노', '😱 두려움', '🍺 쾌락'],
-      duration: 12000
+      duration: 25000
     },
     next: {
       '😡 분노': 's08_1_anger',
@@ -408,7 +438,7 @@ window.SCENES = {
       rows: 7,
       cols: 6,
       winners_needed: 3,                // 선착순 N명이 클리어하면 미션 성공
-      duration: 60000                   // 1분 제한 (선착순 다 채워지면 조기 종료)
+      duration: 100000                   // 1분 제한 (선착순 다 채워지면 조기 종료)
     },
     next: { success: 's08_2_calm', default: 's08_2_calm' }
   },
@@ -445,7 +475,7 @@ window.SCENES = {
       type: 'choice',
       prompt: '🤖 로봇: "조력자를 살리려면 USB를 내놔라"',
       options: ['💾 USB 를 넘긴다 (조력자 구출)', '⚔️ 조력자를 포기한다 (USB 사수)'],
-      duration: 15000
+      duration: 25000
     },
     next: {
       '💾 USB 를 넘긴다 (조력자 구출)': 's08_5_rescue',
@@ -464,7 +494,7 @@ window.SCENES = {
       type: 'choice',
       prompt: '🤖 로봇: "조력자를 살리려면 USB를 내놔라"',
       options: ['💾 USB 를 넘긴다 (조력자 구출)', '⚔️ 조력자를 포기한다 (USB 사수)'],
-      duration: 15000
+      duration: 25000
     },
     next: {
       '💾 USB 를 넘긴다 (조력자 구출)': 's08_5_rescue',
@@ -505,7 +535,7 @@ window.SCENES = {
   // ════════════════════════════════════════════════════════════
   'chapter9_title': {
     type: 'chapter_title',
-    chapter_label: '제 9장 · 최종',
+    chapter_label: '최종장',
     title: '중앙제어 시스템',
     next: 's09_villain_before'
   },
@@ -520,9 +550,11 @@ window.SCENES = {
       type: 'choice',
       prompt: '🎯 어떻게 할까?',
       options: ['💾 USB 를 꽂는다', '🤔 USB 를 꽂지 않는다'],
-      duration: 15000
+      // 청중 폰에서 '안 꽂는다' 누르면 빨간 흔들림 + 비활성화 (선택의 환상만)
+      reject_options: ['🤔 USB 를 꽂지 않는다'],
+      duration: 25000
     },
-    // B 를 골라도 결국 A 로 가게 만듦 (강제 분기)
+    // B 를 골라도 결국 A 로 가게 만듦 (강제 분기) — 사실상 청중 폰에서도 B 는 선택 불가
     next: {
       '💾 USB 를 꽂는다': 's09_villain_after',
       '🤔 USB 를 꽂지 않는다': 's09_villain_after',
@@ -540,7 +572,7 @@ window.SCENES = {
       type: 'choice',
       prompt: '🔫 흑막이 방아쇠를 당기려 한다',
       options: ['🚷 섣불리 나서지 않는다', '🗣️ 흑막을 설득한다'],
-      duration: 15000
+      duration: 25000
     },
     next: {
       '🚷 섣불리 나서지 않는다': 'ending_die',

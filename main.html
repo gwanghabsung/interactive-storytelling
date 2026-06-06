@@ -5,7 +5,7 @@
 <title>Interactive Audience Game</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+KR:wght@400;500;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #000;
@@ -51,6 +51,16 @@
     transition: opacity 0.4s ease;
   }
   .overlay.show { opacity: 1; pointer-events: auto; }
+  /* 챕터 타이틀 모드 — 솔리드 검은 배경으로 이전 씬 완전히 가림 */
+  .overlay.chapter-mode {
+    background: radial-gradient(ellipse at center, rgba(15,15,20,0.97) 0%, rgba(0,0,0,0.99) 100%);
+  }
+  /* 게임 인트로 모드 — 살짝 어둡게 (영상 freeze 프레임이 은은하게 보임) */
+  .overlay.intro-mode {
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
 
   .overlay-backdrop {
     position: absolute; inset: 0;
@@ -887,7 +897,7 @@ function showOverlay(scene_id, overlayDef) {
 }
 
 function hideOverlay() {
-  overlay.classList.remove('show');
+  overlay.classList.remove('show', 'chapter-mode', 'intro-mode');
   currentOverlayState = null;
   qteShellSceneId = null;   // 다음 씬에서 셸 새로 빌드되도록
   stopOverlayTimer();
@@ -938,6 +948,83 @@ function renderOverlay(options, tally, overlayDef, showWinner = false) {
     `;
     document.getElementById('manualAdvanceBtn').onclick = () => {
       // stopOverlayTimer() 를 부르면 waitForOverlayTimer() 가 즉시 풀림
+      stopOverlayTimer();
+    };
+    return;
+  }
+
+  // chapter_title 오버레이 타입 — 영상 중간 freeze 후 챕터 카드 띄우기
+  //   (별도 chapter_title 씬과 동일한 비주얼, 단 영상 freeze 위에서 작동)
+  //   배경 어둡게 하기 위해 chapter-mode 클래스도 같이 적용
+  if (overlayDef.type === 'chapter_title') {
+    overlay.classList.add('chapter-mode');
+    overlayContent.innerHTML = `
+      <style>
+        .cto-wrap {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 36px; min-height: 70vh;
+        }
+        .cto-label {
+          font-family: 'Noto Serif KR', 'Times New Roman', serif;
+          font-size: clamp(18px, 1.8vw, 26px);
+          font-style: italic;
+          letter-spacing: 0.12em;
+          color: var(--accent);
+          font-weight: 500;
+          text-shadow: 0 0 18px rgba(255,214,10,0.4);
+        }
+        .cto-title {
+          font-size: clamp(56px, 8vw, 120px);
+          font-weight: 800;
+          letter-spacing: -0.03em;
+          line-height: 1.1;
+          text-align: center;
+          color: var(--text);
+          text-shadow:
+            0 0 60px rgba(255,214,10,0.25),
+            0 0 24px rgba(255,214,10,0.18),
+            0 6px 20px rgba(0,0,0,0.9),
+            0 2px 6px rgba(0,0,0,0.7);
+          animation: ctoFadeIn 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes ctoFadeIn {
+          from { opacity: 0; transform: translateY(28px); letter-spacing: 0.02em; }
+          to   { opacity: 1; transform: translateY(0);    letter-spacing: -0.03em; }
+        }
+        .cto-divider {
+          width: 80px; height: 2px;
+          background: linear-gradient(90deg, transparent, var(--accent), transparent);
+          animation: ctoDividerGrow 1.2s ease-out;
+          box-shadow: 0 0 12px rgba(255,214,10,0.5);
+        }
+        @keyframes ctoDividerGrow {
+          from { width: 0; opacity: 0; }
+          to   { width: 80px; opacity: 1; }
+        }
+        .cto-advance {
+          margin-top: 24px;
+          padding: 18px 38px; border-radius: 999px;
+          background: transparent; color: var(--text);
+          border: 2px solid var(--line);
+          font-size: 16px; font-weight: 700;
+          font-family: 'JetBrains Mono', monospace;
+          letter-spacing: 0.08em; cursor: pointer;
+          transition: all 0.2s;
+        }
+        .cto-advance:hover {
+          background: var(--accent); color: #0a0a0f; border-color: var(--accent);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(255,214,10,0.4);
+        }
+      </style>
+      <div class="cto-wrap">
+        <div class="cto-label">${escapeHtml(overlayDef.chapter_label || '')}</div>
+        <div class="cto-divider"></div>
+        <h1 class="cto-title">${escapeHtml(overlayDef.title || '')}</h1>
+        <button class="cto-advance" id="chapterAdvanceBtn">▶ 다음 진행</button>
+      </div>
+    `;
+    document.getElementById('chapterAdvanceBtn').onclick = () => {
       stopOverlayTimer();
     };
     return;
@@ -1327,6 +1414,8 @@ async function playScene(sceneId) {
     await runBranchScene(sceneId, scene);
   } else if (scene.type === 'chapter_title') {
     await runChapterTitleScene(sceneId, scene);
+  } else if (scene.type === 'logic_break') {
+    await runLogicBreakScene(sceneId, scene);
   }
 }
 
@@ -1398,12 +1487,13 @@ async function runChapterTitleScene(sceneId, scene) {
         gap: 36px; min-height: 70vh;
       }
       .ct-label {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: clamp(16px, 1.6vw, 22px);
-        letter-spacing: 0.4em;
+        font-family: 'Noto Serif KR', 'Times New Roman', serif;
+        font-size: clamp(18px, 1.8vw, 26px);
+        font-style: italic;
+        letter-spacing: 0.12em;
         color: var(--accent);
-        font-weight: 700;
-        text-transform: uppercase;
+        font-weight: 500;
+        text-shadow: 0 0 18px rgba(255,214,10,0.4);
       }
       .ct-title {
         font-size: clamp(56px, 8vw, 120px);
@@ -1412,17 +1502,24 @@ async function runChapterTitleScene(sceneId, scene) {
         line-height: 1.1;
         text-align: center;
         color: var(--text);
-        animation: ctFadeIn 0.8s ease-out;
+        /* 다층 그림자 — 따뜻한 황금 외광 + 깊이 있는 어두운 그림자 */
+        text-shadow:
+          0 0 60px rgba(255,214,10,0.25),       /* 멀리 퍼지는 황금 글로우 */
+          0 0 24px rgba(255,214,10,0.18),       /* 가까운 글로우 */
+          0 6px 20px rgba(0,0,0,0.9),           /* 깊이감 있는 드롭 섀도우 */
+          0 2px 6px rgba(0,0,0,0.7);            /* 텍스트 살짝 띄움 */
+        animation: ctFadeIn 0.9s cubic-bezier(0.16, 1, 0.3, 1);
       }
       @keyframes ctFadeIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to   { opacity: 1; transform: translateY(0); }
+        from { opacity: 0; transform: translateY(28px); letter-spacing: 0.02em; }
+        to   { opacity: 1; transform: translateY(0);    letter-spacing: -0.03em; }
       }
       .ct-divider {
         width: 80px; height: 2px;
-        background: var(--accent);
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
         margin: 0;
         animation: ctDividerGrow 1.2s ease-out;
+        box-shadow: 0 0 12px rgba(255,214,10,0.5);
       }
       @keyframes ctDividerGrow {
         from { width: 0; opacity: 0; }
@@ -1441,6 +1538,7 @@ async function runChapterTitleScene(sceneId, scene) {
       .ct-advance:hover {
         background: var(--accent); color: #0a0a0f; border-color: var(--accent);
         transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(255,214,10,0.4);
       }
     </style>
     <div class="ct-wrap">
@@ -1450,19 +1548,341 @@ async function runChapterTitleScene(sceneId, scene) {
       <button class="ct-advance" id="ctAdvanceBtn">▶ 다음 진행</button>
     </div>
   `;
-  // 오버레이 자체는 어두운 배경이라 검은 화면처럼 보임
-  overlay.classList.add('show');
+  // 솔리드 검은 배경 모드로 표시 → 이전 영상 프레임 완전히 덮음
+  overlay.classList.add('show', 'chapter-mode');
 
   // 진행자 버튼 클릭 대기
   await new Promise(resolve => {
     document.getElementById('ctAdvanceBtn').onclick = resolve;
   });
 
-  // 정리 후 다음 씬
-  overlay.classList.remove('show');
+  // 정리 후 다음 씬 — chapter-mode 도 같이 제거 (다음 씬은 일반 오버레이로 표시)
+  overlay.classList.remove('show', 'chapter-mode');
   await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
 
   if (scene.next) return playScene(scene.next);
+}
+
+// ════════════════════════════════════════════════════════════
+// logic_break — 6-3 머리의 방 미니게임 (3라운드 논리 파괴)
+// ────────────────────────────────────────────────────────────
+//   각 라운드마다 청중 투표 → 다수표 선택지가 결정 → 게이지 줄어듦 + 빨간 데미지
+//   3라운드 완료 시 미션 클리어 → 다음 씬
+// ════════════════════════════════════════════════════════════
+async function runLogicBreakScene(sceneId, scene) {
+  hideEnding();
+  hideOverlay();
+
+  // 인트로 (pre_intro 있으면 시작 버튼까지 대기)
+  await runPregameIntro(sceneId, scene);
+
+  const rounds = scene.rounds || [];
+  const totalRounds = rounds.length;
+  const roundDuration = scene.round_duration || 15000;
+  const revealDuration = scene.reveal_duration || 2200;
+  const winners = [];                  // 각 라운드 승리 선택지 누적
+
+  // 1) 게임 셸 (description, gauge bar, round area) 한 번만 렌더
+  overlayContent.innerHTML = `
+    <style>
+      .lb-wrap { display: flex; flex-direction: column; gap: 28px; max-width: 960px; margin: 0 auto; width: 100%; }
+      .lb-quest {
+        font-size: clamp(28px, 3.4vw, 42px);
+        font-weight: 800; text-align: center;
+        letter-spacing: -0.02em; line-height: 1.2;
+      }
+      .lb-gauge-wrap {
+        position: relative; height: 28px;
+        background: rgba(255,255,255,0.06); border: 1px solid var(--line);
+        border-radius: 999px; overflow: hidden;
+      }
+      .lb-gauge-fill {
+        position: absolute; left: 0; top: 0; bottom: 0;
+        width: 100%;
+        background: linear-gradient(90deg, var(--success), #5dd9b3 60%, var(--accent));
+        transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .lb-gauge-label {
+        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700;
+        letter-spacing: 0.1em; text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+      }
+      .lb-gauge-wrap.damage { animation: lbShake 0.45s cubic-bezier(.36,.07,.19,.97) both; }
+      @keyframes lbShake {
+        10%,90% { transform: translateX(-3px); }
+        20%,80% { transform: translateX(5px); }
+        30%,50%,70% { transform: translateX(-8px); }
+        40%,60% { transform: translateX(8px); }
+      }
+      .lb-screen-damage {
+        position: fixed; inset: 0; pointer-events: none; z-index: 100;
+        background: radial-gradient(ellipse at center, transparent 40%, rgba(220,38,38,0) 100%);
+        opacity: 0;
+      }
+      .lb-screen-damage.flash {
+        animation: lbScreenFlash 0.6s ease-out;
+      }
+      @keyframes lbScreenFlash {
+        0%   { opacity: 0; box-shadow: inset 0 0 0 0 rgba(220,38,38,0); }
+        20%  { opacity: 1; box-shadow: inset 0 0 200px 40px rgba(220,38,38,0.6); }
+        100% { opacity: 0; box-shadow: inset 0 0 200px 40px rgba(220,38,38,0); }
+      }
+
+      .lb-desc {
+        background: var(--surface-2); border: 1px solid var(--line);
+        border-radius: 14px; padding: 22px 28px;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .lb-desc-title {
+        font-size: 14px; letter-spacing: 0.16em; font-weight: 700;
+        color: var(--accent); margin-bottom: 14px;
+      }
+      .lb-desc-items {
+        list-style: none; padding: 0; margin: 0;
+        display: flex; flex-direction: column; gap: 8px;
+        font-size: 17px; color: rgba(255,255,255,0.92); line-height: 1.5;
+      }
+      .lb-desc-items li::before { content: '─ '; color: var(--muted); }
+
+      .lb-round-header {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 16px;
+      }
+      .lb-round-num {
+        font-family: 'JetBrains Mono', monospace; font-size: 14px;
+        letter-spacing: 0.12em; color: var(--accent);
+        padding: 6px 12px; border: 1px solid var(--accent);
+        border-radius: 999px;
+      }
+      .lb-round-question {
+        font-size: 22px; font-weight: 700; flex: 1;
+      }
+      .lb-timer {
+        font-family: 'JetBrains Mono', monospace; font-size: 16px;
+        color: var(--muted); padding: 6px 14px;
+        background: var(--surface); border-radius: 999px;
+        border: 1px solid var(--line);
+      }
+      .lb-timer.warning { color: var(--danger); border-color: var(--danger); }
+
+      .lb-options {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      }
+      .lb-option {
+        position: relative;
+        padding: 22px 26px; border-radius: 14px;
+        background: var(--surface-2); border: 2px solid var(--line);
+        overflow: hidden;
+        transition: all 0.3s;
+      }
+      .lb-option.winner {
+        border-color: var(--accent);
+        background: linear-gradient(180deg, rgba(255,214,10,0.18), rgba(255,214,10,0.04));
+        box-shadow: 0 8px 28px rgba(255,214,10,0.25);
+      }
+      .lb-option-letter {
+        font-family: 'JetBrains Mono', monospace; font-size: 14px;
+        font-weight: 800; color: var(--accent); letter-spacing: 0.08em;
+        margin-bottom: 6px;
+      }
+      .lb-option-text {
+        font-size: 22px; font-weight: 700; line-height: 1.3;
+      }
+      .lb-option-bar {
+        position: absolute; left: 0; bottom: 0;
+        height: 4px; background: var(--accent);
+        transition: width 0.4s ease;
+      }
+      .lb-option-count {
+        position: absolute; top: 14px; right: 18px;
+        font-family: 'JetBrains Mono', monospace; font-size: 16px;
+        font-weight: 800; color: var(--accent);
+      }
+
+      .lb-success {
+        text-align: center;
+        font-size: clamp(40px, 5vw, 64px);
+        font-weight: 800; color: var(--success);
+        text-shadow: 0 0 40px rgba(0,214,143,0.5);
+        animation: lbPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      @keyframes lbPop {
+        0% { transform: scale(0.6); opacity: 0; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+    </style>
+    <div class="lb-screen-damage" id="lbScreenDamage"></div>
+    <div class="lb-wrap">
+      <div class="lb-quest">${escapeHtml(scene.quest_title || '논리 파괴 게임')}</div>
+      <div class="lb-gauge-wrap" id="lbGaugeWrap">
+        <div class="lb-gauge-fill" id="lbGaugeFill" style="width: 100%;"></div>
+        <div class="lb-gauge-label" id="lbGaugeLabel">SYSTEM INTEGRITY · 100%</div>
+      </div>
+      <div class="lb-desc">
+        <div class="lb-desc-title">${escapeHtml(scene.description?.title || '[FILE]')}</div>
+        <ul class="lb-desc-items">
+          ${(scene.description?.items || []).map(it => `<li>${escapeHtml(it)}</li>`).join('')}
+        </ul>
+      </div>
+      <div id="lbRoundArea"></div>
+    </div>
+  `;
+  overlay.classList.add('show');
+
+  // 2) 각 라운드 진행
+  for (let i = 0; i < totalRounds; i++) {
+    const roundNum = i + 1;
+    const round = rounds[i];
+    const roundSceneId = `${sceneId}_r${roundNum}_${Date.now()}`;
+
+    // 라운드 영역 렌더
+    const roundArea = document.getElementById('lbRoundArea');
+    roundArea.innerHTML = `
+      <div class="lb-round-header">
+        <div class="lb-round-num">ROUND ${roundNum} / ${totalRounds}</div>
+        <div class="lb-round-question">${escapeHtml(round.question || '선택지')}</div>
+        <div class="lb-timer" id="lbTimer">⏱ --s</div>
+      </div>
+      <div class="lb-options" style="margin-top: 16px;">
+        ${round.options.map((opt, idx) => `
+          <div class="lb-option" data-idx="${idx}">
+            <div class="lb-option-letter">${String.fromCharCode(65 + idx)})</div>
+            <div class="lb-option-text">${escapeHtml(opt)}</div>
+            <div class="lb-option-count" id="lbCount_${idx}">0</div>
+            <div class="lb-option-bar" id="lbBar_${idx}" style="width: 0%;"></div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    // Firebase 에 라운드 상태 쓰기
+    await set(stateRef, {
+      scene_id: roundSceneId,
+      type: 'logic_break',
+      started_at: Date.now(),
+      duration: roundDuration,
+      payload: {
+        quest_title: scene.quest_title,
+        description: scene.description,
+        current_round: roundNum,
+        total_rounds: totalRounds,
+        question: round.question,
+        options: round.options,
+        gauge: 100 - (i * (100 / totalRounds))
+      },
+      phase: 'collecting',
+      updated_at: Date.now()
+    });
+
+    // 라운드 동안 투표 수집 + 라이브 타이머/카운트 표시
+    currentInputs = {};
+    if (inputsUnsubscribe) inputsUnsubscribe();
+    inputsUnsubscribe = onValue(ref(db, `inputs/${roundSceneId}`), (snap) => {
+      currentInputs = snap.val() || {};
+      updateLogicBreakCounts(round.options, currentInputs);
+    });
+
+    startOverlayTimer(roundDuration);
+    runLogicBreakTimerLoop();
+    await waitForOverlayTimer();
+    stopLogicBreakTimerLoop();
+
+    // 결과 계산 — 다수표 선택지 (동률이면 첫 번째)
+    const tally = {};
+    for (const uid in currentInputs) {
+      const c = currentInputs[uid]?.input?.choice;
+      if (c) tally[c] = (tally[c] || 0) + 1;
+    }
+    let winnerIdx = 0, winnerCount = -1;
+    round.options.forEach((opt, idx) => {
+      if ((tally[opt] || 0) > winnerCount) {
+        winnerCount = tally[opt] || 0;
+        winnerIdx = idx;
+      }
+    });
+    const winner = round.options[winnerIdx];
+    winners.push(winner);
+    console.log(`  Round ${roundNum} winner:`, winner);
+
+    // 결과 공개 — 승자 강조 + 게이지 감소 + 데미지 효과
+    document.querySelectorAll('.lb-option').forEach((el, idx) => {
+      if (idx === winnerIdx) el.classList.add('winner');
+    });
+
+    // Firebase phase reveal 로 청중에게도 결과 공개
+    await update(stateRef, { phase: 'reveal', winner_option: winner, updated_at: Date.now() });
+
+    // 게이지 감소 + 흔들림 + 화면 빨간 플래시
+    const newGauge = 100 - (roundNum * (100 / totalRounds));
+    document.getElementById('lbGaugeFill').style.width = `${newGauge}%`;
+    document.getElementById('lbGaugeLabel').textContent = `SYSTEM INTEGRITY · ${Math.round(newGauge)}%`;
+    document.getElementById('lbGaugeWrap').classList.remove('damage');
+    void document.getElementById('lbGaugeWrap').offsetWidth;  // reflow (애니메이션 재시작용)
+    document.getElementById('lbGaugeWrap').classList.add('damage');
+    document.getElementById('lbScreenDamage').classList.remove('flash');
+    void document.getElementById('lbScreenDamage').offsetWidth;
+    document.getElementById('lbScreenDamage').classList.add('flash');
+
+    await sleep(revealDuration);
+  }
+
+  // 3) 모든 라운드 완료 — 성공 배너 잠깐 보여주고 다음 씬
+  if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
+  const roundArea = document.getElementById('lbRoundArea');
+  if (roundArea) {
+    roundArea.innerHTML = `<div class="lb-success">💥 시스템 다운! 컴퓨터 논리 파괴 성공</div>`;
+  }
+  // 게이지는 0% 까지 떨어진 상태
+  await set(stateRef, {
+    scene_id: `${sceneId}_done_${Date.now()}`,
+    type: 'logic_break',
+    started_at: Date.now(),
+    duration: 0,
+    payload: { phase_label: 'success', total_rounds: totalRounds, winners: winners },
+    phase: 'success',
+    updated_at: Date.now()
+  });
+  await sleep(2400);
+
+  hideOverlay();
+  await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
+
+  choicesHistory[sceneId] = 'success';
+  if (scene.next) return playScene(scene.next);
+}
+
+// logic_break 라이브 카운트 / 바 업데이트
+function updateLogicBreakCounts(options, inputs) {
+  const tally = {};
+  for (const uid in inputs) {
+    const c = inputs[uid]?.input?.choice;
+    if (c) tally[c] = (tally[c] || 0) + 1;
+  }
+  const total = Object.values(tally).reduce((s, n) => s + n, 0) || 1;
+  options.forEach((opt, idx) => {
+    const n = tally[opt] || 0;
+    const cEl = document.getElementById(`lbCount_${idx}`);
+    const bEl = document.getElementById(`lbBar_${idx}`);
+    if (cEl) cEl.textContent = n;
+    if (bEl) bEl.style.width = `${(n / total) * 100}%`;
+  });
+}
+
+// logic_break 자체 타이머 표시 루프 (overlayTimer 와 별개로 lbTimer 엘리먼트 갱신)
+let lbTimerRaf = null;
+function runLogicBreakTimerLoop() {
+  const tick = () => {
+    const el = document.getElementById('lbTimer');
+    if (!el) return;
+    const remaining = Math.max(0, overlayTimerDurationMs - (Date.now() - overlayTimerStartedAt));
+    el.textContent = `⏱ ${(remaining/1000).toFixed(1)}s`;
+    el.classList.toggle('warning', remaining < 4000);
+    if (remaining > 0) lbTimerRaf = requestAnimationFrame(tick);
+  };
+  lbTimerRaf = requestAnimationFrame(tick);
+}
+function stopLogicBreakTimerLoop() {
+  if (lbTimerRaf) { cancelAnimationFrame(lbTimerRaf); lbTimerRaf = null; }
 }
 
 // 영상 없이 선택지만 띄우는 씬 (미니게임 placeholder, 짧은 대사 분기 등에 사용)
@@ -1474,10 +1894,10 @@ async function runChapterTitleScene(sceneId, scene) {
 //   2) 메인 화면에 설명 + "시작" 버튼 표시
 //   3) 진행자가 시작 버튼 누르면 resolve → 호출자가 본 게임 진행
 // ════════════════════════════════════════════════════════════
-async function runPregameIntro(sceneIdPrefix, overlay) {
-  if (!overlay?.pre_intro) return;  // 인트로 정의 없으면 스킵
+async function runPregameIntro(sceneIdPrefix, gameOverlay) {
+  if (!gameOverlay?.pre_intro) return;  // 인트로 정의 없으면 스킵
 
-  const intro = overlay.pre_intro;
+  const intro = gameOverlay.pre_intro;
   const introSceneId = `${sceneIdPrefix}_intro_${Date.now()}`;
   const description = Array.isArray(intro.description) ? intro.description : [intro.description || ''];
 
@@ -1490,7 +1910,7 @@ async function runPregameIntro(sceneIdPrefix, overlay) {
     payload: {
       title: intro.title || '',
       description: description,
-      game_type: overlay.type
+      game_type: gameOverlay.type
     },
     phase: 'intro',
     updated_at: Date.now()
@@ -1541,7 +1961,7 @@ async function runPregameIntro(sceneIdPrefix, overlay) {
       <button class="pgi-start-btn" id="pgiStartBtn">${escapeHtml(intro.button_label || '🎮 게임 시작')}</button>
     </div>
   `;
-  overlay.classList.add('show');
+  overlay.classList.add('show', 'intro-mode');   // 살짝 어두운 배경으로 영상 freeze 프레임 흐림
   currentOverlayState = { scene_id: introSceneId, overlay: { type: 'pregame_intro' }, started_at: Date.now() };
 
   // 진행자가 버튼 누를 때까지 대기
@@ -1550,6 +1970,8 @@ async function runPregameIntro(sceneIdPrefix, overlay) {
   });
 
   // 인트로 종료 — 호출자가 곧 본 게임 상태를 쓸 거니까 오버레이는 그대로 두고 currentOverlayState 만 정리
+  // intro-mode 는 다음 게임 화면에 영향 안 주도록 제거
+  overlay.classList.remove('intro-mode');
   currentOverlayState = null;
 }
 
@@ -1612,6 +2034,43 @@ async function runVideoScene(sceneId, scene) {
   await waitForDuration(activeVideo);
   const totalDuration = activeVideo.duration || 0;
 
+  // 2-b) chapter_card 가 정의돼있으면 영상 중간에 한 번 멈춰서 챕터 카드 띄움
+  //   예: { freeze_at: 11.0, chapter_label: '제 8장', title: '가슴의 방' }
+  //   본 overlay/freeze 와 별개로 먼저 처리됨
+  if (scene.chapter_card && scene.chapter_card.freeze_at !== undefined) {
+    const cc = scene.chapter_card;
+    const ccSlow = cc.slow_duration ?? 0.5;
+    await playUntilFreeze(activeVideo, cc.freeze_at, ccSlow);
+
+    // Firebase 에 챕터 카드 상태 쓰기 → 청중 폰 동기화
+    const ccSceneId = `${sceneId}_chapter_${Date.now()}`;
+    await set(stateRef, {
+      scene_id: ccSceneId,
+      type: 'chapter_title',
+      started_at: Date.now(),
+      duration: 999999,
+      payload: { chapter_label: cc.chapter_label || '', title: cc.title || '' },
+      phase: 'intro',
+      updated_at: Date.now()
+    });
+
+    // 메인 화면에 챕터 카드 오버레이 표시 + 진행자 버튼 대기
+    currentOverlayState = { scene_id: ccSceneId, overlay: { type: 'chapter_title' }, started_at: Date.now() };
+    startOverlayTimer(999999);    // waitForOverlayTimer() 가 stopOverlayTimer() 호출 시 깨어나도록
+    renderOverlay(null, null, {
+      type: 'chapter_title',
+      chapter_label: cc.chapter_label,
+      title: cc.title
+    }, false);
+    overlay.classList.add('show');
+
+    await waitForOverlayTimer();   // 진행자가 "▶ 다음 진행" 누르면 stopOverlayTimer 발동 → resolve
+
+    // 챕터 카드 정리 — 영상 이어 재생 준비
+    hideOverlay();
+    await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
+  }
+
   let freezeAt = null;
   if (scene.freeze_at !== undefined) {
     freezeAt = scene.freeze_at;
@@ -1646,9 +2105,9 @@ async function runVideoScene(sceneId, scene) {
     // 6) 투표 시간 동안 대기 (진행자가 ⏹ 버튼이나 −Ns 로 단축 가능)
     await waitForOverlayTimer();
 
-    // 6-b) manual 타입은 청중 투표가 아니라 진행자 버튼 클릭 — reveal 없이 바로 다음 진행
-    if (scene.overlay.type === 'manual') {
-      console.log('  Manual advance');
+    // 6-b) manual / chapter_title — 청중 투표가 아니라 진행자 버튼 클릭, reveal 없이 바로 진행
+    if (scene.overlay.type === 'manual' || scene.overlay.type === 'chapter_title') {
+      console.log('  Manual advance (' + scene.overlay.type + ')');
       choicesHistory[sceneId] = 'default';
       hideOverlay();
       if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
@@ -1888,6 +2347,8 @@ function buildOverlayPayload(overlay) {
   } else if (overlay.type === 'ox') {
     p.options = ['O', 'X'];
   }
+  // 거부 선택지 — 청중 폰에서 탭하면 흔들리며 비활성화 (선택지의 환상만 주는 강제 분기용)
+  if (overlay.reject_options) p.reject_options = overlay.reject_options;
   if (overlay.tap_target_per_user !== undefined) p.tap_target_per_user = overlay.tap_target_per_user;
   if (overlay.tap_target_total !== undefined) p.tap_target_total = overlay.tap_target_total;
   // map_align 전용 필드 전달 — 청중 폰 audience.html 에서 사용
@@ -1904,6 +2365,11 @@ function buildOverlayPayload(overlay) {
   // manual 전용 — 청중에게는 안내 문구만, 진행자가 메인에서 수동 진행
   if (overlay.type === 'manual') {
     p.advance_label = overlay.advance_label || '✓ 다음 진행';
+  }
+  // chapter_title 오버레이 — 청중 폰에도 동일한 챕터 카드 표시
+  if (overlay.type === 'chapter_title') {
+    p.chapter_label = overlay.chapter_label || '';
+    p.title         = overlay.title         || '';
   }
   // match3 전용 필드 전달 — 청중 폰에서 게임 구동
   if (overlay.type === 'match3') {
