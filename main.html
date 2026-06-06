@@ -559,6 +559,30 @@
     margin-top: 60px;
     white-space: pre-line;
   }
+  /* 수강생 메시지 — 이름 + 한 줄 후기 */
+  .credits-roll .message {
+    margin-bottom: 38px;
+    text-align: left;
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .credits-roll .message .name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(15px, 1.4vw, 18px);
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .credits-roll .message .text {
+    font-size: clamp(19px, 2vw, 26px);
+    font-weight: 400;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.92);
+  }
+  .credits-roll .message-teacher .name { color: var(--success); }
   .credits-restart {
     position: fixed;
     bottom: 32px; left: 50%; transform: translateX(-50%);
@@ -685,11 +709,11 @@
   <button class="hud-btn" id="restartBtn" style="display:none">RESTART</button>
 </div>
 
-<!-- 진행자 컨트롤 (영상 스킵 / 타이머 감축) -->
+<!-- 진행자 컨트롤 (영상 스킵 / 일시정지 / 투표 단축) -->
 <div class="dev-controls" id="devControls">
   <button class="dev-btn" id="skipVideoBtn" title="현재 영상을 끝(또는 freeze 지점)까지 스킵">⏭ 영상</button>
+  <button class="dev-btn" id="pauseBtn" title="현재 영상 일시정지 / 재생 (다시 누르면 토글)">⏸ 일시정지</button>
   <button class="dev-btn" id="shave5Btn" title="투표 타이머 -5초">−5s</button>
-  <button class="dev-btn" id="shave10Btn" title="투표 타이머 -10초">−10s</button>
   <button class="dev-btn danger" id="endVoteBtn" title="투표를 즉시 종료">⏹ 투표</button>
 </div>
 
@@ -773,6 +797,7 @@ function resolveVideoSrc(src) {
 const vA = document.getElementById('vA');
 const vB = document.getElementById('vB');
 let activeVideo = vA, standbyVideo = vB;
+let presenterPaused = false;  // 진행자가 수동 일시정지 했는지 추적 (자동 freeze 와 구분)
 
 function swapVideos() {
   activeVideo.classList.remove('active');
@@ -807,7 +832,9 @@ function playUntilFreeze(video, freezeAt, slowDuration) {
     try { await video.play(); } catch(e) { video.muted = true; await video.play(); }
 
     const monitor = () => {
-      if (video.paused || video.ended) { resolve(); return; }
+      // ended 만 종료 트리거 — paused 는 진행자가 수동 정지했을 수도 있으니 무시
+      // (수동 정지 시엔 currentTime 이 멈추므로 monitor 가 그냥 폴링만 계속함 → resume 하면 다시 동작)
+      if (video.ended) { resolve(); return; }
       const remaining = freezeAt - video.currentTime;
 
       if (remaining <= slowDuration) {
@@ -1298,6 +1325,8 @@ async function playScene(sceneId) {
     await runChoiceOnlyScene(sceneId, scene);
   } else if (scene.type === 'branch') {
     await runBranchScene(sceneId, scene);
+  } else if (scene.type === 'chapter_title') {
+    await runChapterTitleScene(sceneId, scene);
   }
 }
 
@@ -1327,10 +1356,209 @@ async function runBranchScene(sceneId, scene) {
   if (nextId) return playScene(nextId);
 }
 
+// ════════════════════════════════════════════════════════════
+// 챕터 타이틀 카드 — 검은 화면에 "제 N장: 제목" 표시 후 진행자가 클릭하면 다음 씬으로
+// ────────────────────────────────────────────────────────────
+//   's06_chapter_title': {
+//     type: 'chapter_title',
+//     chapter_label: '제 6장',
+//     title: '머리의 방',
+//     next: 's06_1_decision'
+//   }
+// ════════════════════════════════════════════════════════════
+async function runChapterTitleScene(sceneId, scene) {
+  hideEnding();
+  hideOverlay();
+
+  // 영상 일시정지 — 이전 씬 마지막 프레임이 보이지 않게
+  vA.pause(); vB.pause();
+  // active 영상의 src 를 빈값으로 해서 검은 배경만 보이게 (혹은 그냥 element 숨김)
+  document.querySelectorAll('.video').forEach(v => v.classList.remove('active'));
+
+  // 청중 폰용 firebase 상태
+  const introSceneId = `${sceneId}_${Date.now()}`;
+  await set(stateRef, {
+    scene_id: introSceneId,
+    type: 'chapter_title',
+    started_at: Date.now(),
+    duration: 0,
+    payload: {
+      chapter_label: scene.chapter_label || '',
+      title: scene.title || ''
+    },
+    phase: 'intro',
+    updated_at: Date.now()
+  });
+
+  // 메인 화면 오버레이
+  overlayContent.innerHTML = `
+    <style>
+      .ct-wrap {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 36px; min-height: 70vh;
+      }
+      .ct-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: clamp(16px, 1.6vw, 22px);
+        letter-spacing: 0.4em;
+        color: var(--accent);
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .ct-title {
+        font-size: clamp(56px, 8vw, 120px);
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+        text-align: center;
+        color: var(--text);
+        animation: ctFadeIn 0.8s ease-out;
+      }
+      @keyframes ctFadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      .ct-divider {
+        width: 80px; height: 2px;
+        background: var(--accent);
+        margin: 0;
+        animation: ctDividerGrow 1.2s ease-out;
+      }
+      @keyframes ctDividerGrow {
+        from { width: 0; opacity: 0; }
+        to   { width: 80px; opacity: 1; }
+      }
+      .ct-advance {
+        margin-top: 24px;
+        padding: 18px 38px; border-radius: 999px;
+        background: transparent; color: var(--text);
+        border: 2px solid var(--line);
+        font-size: 16px; font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        letter-spacing: 0.08em; cursor: pointer;
+        transition: all 0.2s;
+      }
+      .ct-advance:hover {
+        background: var(--accent); color: #0a0a0f; border-color: var(--accent);
+        transform: translateY(-2px);
+      }
+    </style>
+    <div class="ct-wrap">
+      <div class="ct-label">${escapeHtml(scene.chapter_label || '')}</div>
+      <div class="ct-divider"></div>
+      <h1 class="ct-title">${escapeHtml(scene.title || '')}</h1>
+      <button class="ct-advance" id="ctAdvanceBtn">▶ 다음 진행</button>
+    </div>
+  `;
+  // 오버레이 자체는 어두운 배경이라 검은 화면처럼 보임
+  overlay.classList.add('show');
+
+  // 진행자 버튼 클릭 대기
+  await new Promise(resolve => {
+    document.getElementById('ctAdvanceBtn').onclick = resolve;
+  });
+
+  // 정리 후 다음 씬
+  overlay.classList.remove('show');
+  await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
+
+  if (scene.next) return playScene(scene.next);
+}
+
 // 영상 없이 선택지만 띄우는 씬 (미니게임 placeholder, 짧은 대사 분기 등에 사용)
+// ════════════════════════════════════════════════════════════
+// 게임 시작 전 인트로 — 모든 미니게임 (map_align/match3/qte_burst) 공통
+// ────────────────────────────────────────────────────────────
+// overlay.pre_intro 가 정의돼있으면 게임 본 단계 전에 이 함수가 먼저 실행됨
+//   1) Firebase 에 pregame_intro 상태 쓰기 → 청중 폰에 안내 화면
+//   2) 메인 화면에 설명 + "시작" 버튼 표시
+//   3) 진행자가 시작 버튼 누르면 resolve → 호출자가 본 게임 진행
+// ════════════════════════════════════════════════════════════
+async function runPregameIntro(sceneIdPrefix, overlay) {
+  if (!overlay?.pre_intro) return;  // 인트로 정의 없으면 스킵
+
+  const intro = overlay.pre_intro;
+  const introSceneId = `${sceneIdPrefix}_intro_${Date.now()}`;
+  const description = Array.isArray(intro.description) ? intro.description : [intro.description || ''];
+
+  // 청중 폰용 firebase 상태
+  await set(stateRef, {
+    scene_id: introSceneId,
+    type: 'pregame_intro',
+    started_at: Date.now(),
+    duration: 0,
+    payload: {
+      title: intro.title || '',
+      description: description,
+      game_type: overlay.type
+    },
+    phase: 'intro',
+    updated_at: Date.now()
+  });
+
+  // 메인 화면 인트로 오버레이
+  const descHtml = description.map(line => `<li>${escapeHtml(line)}</li>`).join('');
+  overlayContent.innerHTML = `
+    <style>
+      .pgi-main { display: flex; flex-direction: column; align-items: center; gap: 28px; max-width: 720px; margin: 0 auto; }
+      .pgi-main-badge {
+        font-family: 'JetBrains Mono', monospace; font-size: 13px;
+        letter-spacing: 0.18em; color: var(--accent);
+        padding: 8px 18px; border: 1px solid var(--accent);
+        border-radius: 999px; background: rgba(255,214,10,0.08);
+      }
+      .pgi-main-title {
+        font-size: clamp(36px, 4.5vw, 56px); font-weight: 800;
+        letter-spacing: -0.02em; line-height: 1.15; text-align: center;
+      }
+      .pgi-main-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; width: 100%; }
+      .pgi-main-list li {
+        font-size: clamp(18px, 1.8vw, 22px); line-height: 1.5;
+        padding: 16px 22px; background: var(--surface-2);
+        border: 1px solid var(--line); border-radius: 12px;
+        text-align: left;
+      }
+      .pgi-main-list li::before {
+        content: '·'; color: var(--accent); margin-right: 12px;
+        font-weight: 800; font-size: 1.3em;
+      }
+      .pgi-start-btn {
+        margin-top: 12px;
+        padding: 22px 56px; border-radius: 999px;
+        background: var(--accent); color: #0a0a0f; border: none;
+        font-size: 24px; font-weight: 800; letter-spacing: -0.01em;
+        font-family: inherit; cursor: pointer;
+        box-shadow: 0 10px 36px rgba(255,214,10,0.4);
+        transition: all 0.2s;
+      }
+      .pgi-start-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 44px rgba(255,214,10,0.55); }
+      .pgi-start-btn:active { transform: translateY(0); }
+    </style>
+    <div class="pgi-main">
+      <div class="pgi-main-badge">🎮 MINIGAME · 준비</div>
+      <div class="pgi-main-title">${escapeHtml(intro.title || '게임 시작')}</div>
+      <ul class="pgi-main-list">${descHtml}</ul>
+      <button class="pgi-start-btn" id="pgiStartBtn">${escapeHtml(intro.button_label || '🎮 게임 시작')}</button>
+    </div>
+  `;
+  overlay.classList.add('show');
+  currentOverlayState = { scene_id: introSceneId, overlay: { type: 'pregame_intro' }, started_at: Date.now() };
+
+  // 진행자가 버튼 누를 때까지 대기
+  await new Promise(resolve => {
+    document.getElementById('pgiStartBtn').onclick = resolve;
+  });
+
+  // 인트로 종료 — 호출자가 곧 본 게임 상태를 쓸 거니까 오버레이는 그대로 두고 currentOverlayState 만 정리
+  currentOverlayState = null;
+}
+
 async function runChoiceOnlyScene(sceneId, scene) {
   hideEnding();
   // 검은 화면 유지 (직전 영상의 마지막 프레임이 남아있어도 그대로 OK)
+
+  // 게임 인트로 (overlay.pre_intro 있으면 시작 버튼까지 대기)
+  await runPregameIntro(sceneId, scene.overlay);
 
   const fbScene = {
     scene_id: `${sceneId}_${Date.now()}`,
@@ -1375,6 +1603,11 @@ async function runVideoScene(sceneId, scene) {
   hideOverlay();
   hideEnding();
 
+  // 새 영상 시작 시 진행자 일시정지 상태 초기화 + 버튼 라벨 복구
+  presenterPaused = false;
+  const pbtn = document.getElementById('pauseBtn');
+  if (pbtn) pbtn.textContent = '⏸ 일시정지';
+
   // 2) freeze 지점 계산 — duration 알려면 metadata 필요
   await waitForDuration(activeVideo);
   const totalDuration = activeVideo.duration || 0;
@@ -1390,6 +1623,9 @@ async function runVideoScene(sceneId, scene) {
   if (freezeAt !== null && scene.overlay) {
     const slow = scene.slow_duration ?? 2.0;
     await playUntilFreeze(activeVideo, freezeAt, slow);
+
+    // 3-b) 게임 인트로 (overlay.pre_intro 있으면 시작 버튼까지 대기 — 영상은 freeze 상태로 정지)
+    await runPregameIntro(sceneId, scene.overlay);
 
     // 4) Firebase 에 씬 상태 쓰기 → 청중 폰 알림
     const fbScene = {
@@ -1588,6 +1824,22 @@ function buildCreditsHtml(scene) {
   const producers = scene.producers || [];
   const producersHtml = producers.map(p => `<div class="row">${escapeHtml(p)}</div>`).join('');
 
+  // 수강생/교수님 메시지 — 이름 + 후기 문장 (교수님은 색 다르게)
+  const messages = scene.messages || [];
+  const messagesHtml = messages.map(m => {
+    const isTeacher = (m.name || '').includes('교수');
+    return `
+      <div class="message ${isTeacher ? 'message-teacher' : ''}">
+        <div class="name">${escapeHtml(m.name || '')}</div>
+        <div class="text">${escapeHtml(m.text || '')}</div>
+      </div>`;
+  }).join('');
+  const messagesSection = messages.length ? `
+    <section>
+      <h3>From The Class</h3>
+      ${messagesHtml}
+    </section>` : '';
+
   return `
     <h1>${escapeHtml(scene.title || '🎬 The End')}</h1>
     <div class="subtitle">${escapeHtml(scene.subtitle || '')}</div>
@@ -1608,6 +1860,8 @@ function buildCreditsHtml(scene) {
       <h3>Supervised By</h3>
       <div class="row">${escapeHtml(scene.supervisor || '')}</div>
     </section>
+
+    ${messagesSection}
 
     <section>
       <h3>${escapeHtml(scene.course || '')}</h3>
@@ -1787,8 +2041,28 @@ document.getElementById('skipVideoBtn').onclick = () => {
     try { activeVideo.currentTime = Math.max(0, dur - 0.1); } catch(e) { console.warn('skip failed', e); }
   }
 };
+
+// 일시정지 토글 — 진행자가 발표 중 잠깐 멈출 때
+//   - 재생 중일 때만 작동, 진행자가 누른 상태에서만 다시 재생 가능
+//   - freeze 등 자동 정지 상태일 땐 클릭해도 무시 (실수로 freeze 해제되는 사고 방지)
+document.getElementById('pauseBtn').onclick = () => {
+  if (!activeVideo) return;
+  const btn = document.getElementById('pauseBtn');
+  if (presenterPaused) {
+    // 진행자가 멈췄던 상태 → 재생 재개
+    activeVideo.play().catch(err => console.warn('play failed', err));
+    presenterPaused = false;
+    btn.textContent = '⏸ 일시정지';
+  } else if (!activeVideo.paused) {
+    // 재생 중 → 진행자가 일시정지
+    activeVideo.pause();
+    presenterPaused = true;
+    btn.textContent = '▶ 재생';
+  }
+  // else: 자동 정지 (freeze / 씬 전환) 중 — 클릭 무시
+};
+
 document.getElementById('shave5Btn').onclick = () => shaveOverlayTimer(5000);
-document.getElementById('shave10Btn').onclick = () => shaveOverlayTimer(10000);
 document.getElementById('endVoteBtn').onclick = () => shaveOverlayTimer(99999999);
 
 // ════════════════════════════════════════════════════════════

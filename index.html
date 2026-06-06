@@ -72,6 +72,100 @@
   .waiting h2 { margin: 0; font-size: 22px; font-weight: 500; }
   .waiting p { margin: 0; color: var(--muted); font-size: 13px;
                font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em; }
+
+  /* ─── 챕터 타이틀 카드 (chapter_title) ─── */
+  .ct-scene {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 28px; text-align: center;
+  }
+  .ct-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px; letter-spacing: 0.35em;
+    color: var(--accent); font-weight: 700;
+    text-transform: uppercase;
+  }
+  .ct-divider {
+    width: 50px; height: 2px;
+    background: var(--accent);
+    animation: ctDividerGrowM 1.2s ease-out;
+  }
+  @keyframes ctDividerGrowM {
+    from { width: 0; opacity: 0; }
+    to   { width: 50px; opacity: 1; }
+  }
+  .ct-title {
+    font-size: 44px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    animation: ctFadeInM 0.8s ease-out;
+  }
+  @keyframes ctFadeInM {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .ct-ready {
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--muted); letter-spacing: 0.04em;
+    margin-top: 20px;
+  }
+  .ct-pulse {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    animation: pgiPulse 1.4s ease-in-out infinite;
+  }
+
+  /* ─── 게임 시작 전 안내 (pregame_intro) ─── */
+  .pgi-scene {
+    flex: 1; display: flex; flex-direction: column;
+    justify-content: center; gap: 24px;
+    text-align: center; padding: 16px 4px;
+  }
+  .pgi-badge {
+    align-self: center;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    letter-spacing: 0.15em; color: var(--accent);
+    padding: 6px 14px; border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: rgba(255,214,10,0.08);
+  }
+  .pgi-title {
+    font-size: 28px; font-weight: 800; letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+  .pgi-list {
+    list-style: none; padding: 0; margin: 0;
+    display: flex; flex-direction: column; gap: 10px;
+    text-align: left;
+    max-width: 100%;
+  }
+  .pgi-list li {
+    font-size: 15px; line-height: 1.45;
+    padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px;
+    color: rgba(255,255,255,0.92);
+  }
+  .pgi-list li::before {
+    content: '·'; color: var(--accent); margin-right: 8px; font-weight: 800;
+  }
+  .pgi-ready {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--muted); letter-spacing: 0.04em;
+    margin-top: 8px;
+  }
+  .pgi-pulse {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    animation: pgiPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pgiPulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%     { opacity: 0.3; transform: scale(1.4); }
+  }
   .scene { flex: 1; display: flex; flex-direction: column; gap: 20px; }
   .scene-prompt { font-size: 26px; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; }
   .timer-pill {
@@ -804,6 +898,42 @@ function renderScene(state) {
   // match3 도 전용 렌더러
   if (type === 'match3') {
     renderMatch3Game(state);
+    return;
+  }
+
+  // chapter_title: 챕터 시작 안내 — 진행자가 클릭할 때까지 대기
+  if (type === 'chapter_title') {
+    document.getElementById('body').innerHTML = `
+      <div class="scene ct-scene">
+        <div class="ct-label">${escapeHtml(p.chapter_label || '')}</div>
+        <div class="ct-divider"></div>
+        <div class="ct-title">${escapeHtml(p.title || '')}</div>
+        <div class="ct-ready">
+          <div class="ct-pulse"></div>
+          <div>다음 챕터 곧 시작</div>
+        </div>
+      </div>
+    `;
+    stopTimer();
+    return;
+  }
+
+  // pregame_intro: 게임 시작 직전 안내 — 진행자가 시작 버튼 누를 때까지 대기
+  if (type === 'pregame_intro') {
+    const desc = Array.isArray(p.description) ? p.description : [p.description || ''];
+    const descHtml = desc.map(line => `<li>${escapeHtml(line)}</li>`).join('');
+    document.getElementById('body').innerHTML = `
+      <div class="scene pgi-scene">
+        <div class="pgi-badge">🎮 GAME · 준비</div>
+        <div class="pgi-title">${escapeHtml(p.title || '게임 시작')}</div>
+        <ul class="pgi-list">${descHtml}</ul>
+        <div class="pgi-ready">
+          <div class="pgi-pulse"></div>
+          <div>진행자가 시작하면 자동으로 게임이 시작됩니다</div>
+        </div>
+      </div>
+    `;
+    stopTimer();
     return;
   }
 
