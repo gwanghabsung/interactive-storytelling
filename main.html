@@ -1680,6 +1680,35 @@ async function runLogicBreakScene(sceneId, scene) {
         background: linear-gradient(180deg, rgba(255,214,10,0.18), rgba(255,214,10,0.04));
         box-shadow: 0 8px 28px rgba(255,214,10,0.25);
       }
+      .lb-option.failed {
+        border-color: var(--danger);
+        background: linear-gradient(180deg, rgba(255,61,113,0.18), rgba(255,61,113,0.04));
+        box-shadow: 0 8px 28px rgba(255,61,113,0.3);
+        animation: lbWrongShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+      }
+      .lb-option.failed::after {
+        content: '✗ 시스템이 거부함';
+        display: block; margin-top: 6px;
+        font-family: 'JetBrains Mono', monospace; font-size: 13px;
+        color: var(--danger); letter-spacing: 0.05em; font-weight: 700;
+      }
+      .lb-option.correct-hint {
+        border-color: var(--success);
+        background: linear-gradient(180deg, rgba(0,214,143,0.14), rgba(0,214,143,0.04));
+        box-shadow: 0 4px 14px rgba(0,214,143,0.2);
+      }
+      .lb-option.correct-hint::after {
+        content: '← 진짜 정답';
+        display: block; margin-top: 6px;
+        font-family: 'JetBrains Mono', monospace; font-size: 13px;
+        color: var(--success); letter-spacing: 0.05em; font-weight: 700;
+      }
+      @keyframes lbWrongShake {
+        10%,90% { transform: translateX(-3px); }
+        20%,80% { transform: translateX(5px); }
+        30%,50%,70% { transform: translateX(-9px); }
+        40%,60% { transform: translateX(9px); }
+      }
       .lb-option-letter {
         font-family: 'JetBrains Mono', monospace; font-size: 14px;
         font-weight: 800; color: var(--accent); letter-spacing: 0.08em;
@@ -1729,101 +1758,136 @@ async function runLogicBreakScene(sceneId, scene) {
   `;
   overlay.classList.add('show');
 
-  // 2) 각 라운드 진행
+  // 2) 각 라운드 진행 — 오답이면 같은 라운드를 다시 진행 (게이지 변동 없음)
   for (let i = 0; i < totalRounds; i++) {
     const roundNum = i + 1;
     const round = rounds[i];
-    const roundSceneId = `${sceneId}_r${roundNum}_${Date.now()}`;
+    const correctIdx = round.correct;   // undefined → 어느 답이든 정답으로 간주
+    let attempt = 0;
+    let solved = false;
 
-    // 라운드 영역 렌더
-    const roundArea = document.getElementById('lbRoundArea');
-    roundArea.innerHTML = `
-      <div class="lb-round-header">
-        <div class="lb-round-num">ROUND ${roundNum} / ${totalRounds}</div>
-        <div class="lb-round-question">${escapeHtml(round.question || '선택지')}</div>
-        <div class="lb-timer" id="lbTimer">⏱ --s</div>
-      </div>
-      <div class="lb-options" style="margin-top: 16px;">
-        ${round.options.map((opt, idx) => `
-          <div class="lb-option" data-idx="${idx}">
-            <div class="lb-option-letter">${String.fromCharCode(65 + idx)})</div>
-            <div class="lb-option-text">${escapeHtml(opt)}</div>
-            <div class="lb-option-count" id="lbCount_${idx}">0</div>
-            <div class="lb-option-bar" id="lbBar_${idx}" style="width: 0%;"></div>
-          </div>
-        `).join('')}
-      </div>
-    `;
+    while (!solved) {
+      attempt++;
+      const roundSceneId = `${sceneId}_r${roundNum}_a${attempt}_${Date.now()}`;
+      const retryLabel = attempt > 1 ? ` · 재시도 ${attempt-1}회` : '';
 
-    // Firebase 에 라운드 상태 쓰기
-    await set(stateRef, {
-      scene_id: roundSceneId,
-      type: 'logic_break',
-      started_at: Date.now(),
-      duration: roundDuration,
-      payload: {
-        quest_title: scene.quest_title,
-        description: scene.description,
-        current_round: roundNum,
-        total_rounds: totalRounds,
-        question: round.question,
-        options: round.options,
-        gauge: 100 - (i * (100 / totalRounds))
-      },
-      phase: 'collecting',
-      updated_at: Date.now()
-    });
+      // 라운드 영역 렌더
+      const roundArea = document.getElementById('lbRoundArea');
+      roundArea.innerHTML = `
+        <div class="lb-round-header">
+          <div class="lb-round-num">ROUND ${roundNum} / ${totalRounds}${retryLabel}</div>
+          <div class="lb-round-question">${escapeHtml(round.question || '선택지')}</div>
+          <div class="lb-timer" id="lbTimer">⏱ --s</div>
+        </div>
+        <div class="lb-options" style="margin-top: 16px;">
+          ${round.options.map((opt, idx) => `
+            <div class="lb-option" data-idx="${idx}">
+              <div class="lb-option-letter">${String.fromCharCode(65 + idx)})</div>
+              <div class="lb-option-text">${escapeHtml(opt)}</div>
+              <div class="lb-option-count" id="lbCount_${idx}">0</div>
+              <div class="lb-option-bar" id="lbBar_${idx}" style="width: 0%;"></div>
+            </div>
+          `).join('')}
+        </div>
+      `;
 
-    // 라운드 동안 투표 수집 + 라이브 타이머/카운트 표시
-    currentInputs = {};
-    if (inputsUnsubscribe) inputsUnsubscribe();
-    inputsUnsubscribe = onValue(ref(db, `inputs/${roundSceneId}`), (snap) => {
-      currentInputs = snap.val() || {};
-      updateLogicBreakCounts(round.options, currentInputs);
-    });
+      // Firebase 에 라운드 상태 쓰기
+      await set(stateRef, {
+        scene_id: roundSceneId,
+        type: 'logic_break',
+        started_at: Date.now(),
+        duration: roundDuration,
+        payload: {
+          quest_title: scene.quest_title,
+          description: scene.description,
+          current_round: roundNum,
+          total_rounds: totalRounds,
+          attempt: attempt,
+          question: round.question,
+          options: round.options,
+          gauge: 100 - (i * (100 / totalRounds))
+        },
+        phase: 'collecting',
+        updated_at: Date.now()
+      });
 
-    startOverlayTimer(roundDuration);
-    runLogicBreakTimerLoop();
-    await waitForOverlayTimer();
-    stopLogicBreakTimerLoop();
+      // 라운드 동안 투표 수집 + 라이브 카운트
+      currentInputs = {};
+      if (inputsUnsubscribe) inputsUnsubscribe();
+      inputsUnsubscribe = onValue(ref(db, `inputs/${roundSceneId}`), (snap) => {
+        currentInputs = snap.val() || {};
+        updateLogicBreakCounts(round.options, currentInputs);
+      });
 
-    // 결과 계산 — 다수표 선택지 (동률이면 첫 번째)
-    const tally = {};
-    for (const uid in currentInputs) {
-      const c = currentInputs[uid]?.input?.choice;
-      if (c) tally[c] = (tally[c] || 0) + 1;
-    }
-    let winnerIdx = 0, winnerCount = -1;
-    round.options.forEach((opt, idx) => {
-      if ((tally[opt] || 0) > winnerCount) {
-        winnerCount = tally[opt] || 0;
-        winnerIdx = idx;
+      // ★ currentOverlayState 를 non-null 로 설정 — 안 그러면 startOverlayTimer 의 tick 이 즉시 반환됨
+      currentOverlayState = { scene_id: roundSceneId, overlay: { type: 'logic_break' }, started_at: Date.now() };
+      startOverlayTimer(roundDuration);
+      runLogicBreakTimerLoop();
+      await waitForOverlayTimer();
+      stopLogicBreakTimerLoop();
+
+      // 결과 계산 — 다수표 선택지 (동률이면 첫 번째)
+      const tally = {};
+      for (const uid in currentInputs) {
+        const c = currentInputs[uid]?.input?.choice;
+        if (c) tally[c] = (tally[c] || 0) + 1;
       }
-    });
-    const winner = round.options[winnerIdx];
-    winners.push(winner);
-    console.log(`  Round ${roundNum} winner:`, winner);
+      let winnerIdx = 0, winnerCount = -1;
+      round.options.forEach((opt, idx) => {
+        if ((tally[opt] || 0) > winnerCount) {
+          winnerCount = tally[opt] || 0;
+          winnerIdx = idx;
+        }
+      });
+      const winner = round.options[winnerIdx];
+      const isCorrect = (correctIdx === undefined || correctIdx === null) || (winnerIdx === correctIdx);
+      const correctOpt = (correctIdx !== undefined && correctIdx !== null) ? round.options[correctIdx] : null;
+      console.log(`  Round ${roundNum} attempt ${attempt} winner: ${winner} → ${isCorrect ? 'CORRECT' : 'WRONG'}`);
 
-    // 결과 공개 — 승자 강조 + 게이지 감소 + 데미지 효과
-    document.querySelectorAll('.lb-option').forEach((el, idx) => {
-      if (idx === winnerIdx) el.classList.add('winner');
-    });
+      // Firebase reveal — 청중 폰에도 결과 공개
+      await update(stateRef, {
+        phase: 'reveal',
+        winner_option: winner,
+        correct_option: correctOpt,
+        was_correct: isCorrect,
+        updated_at: Date.now()
+      });
 
-    // Firebase phase reveal 로 청중에게도 결과 공개
-    await update(stateRef, { phase: 'reveal', winner_option: winner, updated_at: Date.now() });
+      // 메인 화면: 승자 강조 (정답이면 노란색/winner, 오답이면 빨간색/failed)
+      document.querySelectorAll('.lb-option').forEach((el, idx) => {
+        if (idx === winnerIdx) {
+          el.classList.add(isCorrect ? 'winner' : 'failed');
+        }
+        // 오답이라면 진짜 정답도 표시
+        if (!isCorrect && correctIdx !== null && idx === correctIdx) {
+          el.classList.add('correct-hint');
+        }
+      });
 
-    // 게이지 감소 + 흔들림 + 화면 빨간 플래시
-    const newGauge = 100 - (roundNum * (100 / totalRounds));
-    document.getElementById('lbGaugeFill').style.width = `${newGauge}%`;
-    document.getElementById('lbGaugeLabel').textContent = `SYSTEM INTEGRITY · ${Math.round(newGauge)}%`;
-    document.getElementById('lbGaugeWrap').classList.remove('damage');
-    void document.getElementById('lbGaugeWrap').offsetWidth;  // reflow (애니메이션 재시작용)
-    document.getElementById('lbGaugeWrap').classList.add('damage');
-    document.getElementById('lbScreenDamage').classList.remove('flash');
-    void document.getElementById('lbScreenDamage').offsetWidth;
-    document.getElementById('lbScreenDamage').classList.add('flash');
-
-    await sleep(revealDuration);
+      if (isCorrect) {
+        // 정답 → 데미지 효과 + 게이지 감소
+        const newGauge = 100 - (roundNum * (100 / totalRounds));
+        document.getElementById('lbGaugeFill').style.width = `${newGauge}%`;
+        document.getElementById('lbGaugeLabel').textContent = `SYSTEM INTEGRITY · ${Math.round(newGauge)}%`;
+        document.getElementById('lbGaugeWrap').classList.remove('damage');
+        void document.getElementById('lbGaugeWrap').offsetWidth;
+        document.getElementById('lbGaugeWrap').classList.add('damage');
+        document.getElementById('lbScreenDamage').classList.remove('flash');
+        void document.getElementById('lbScreenDamage').offsetWidth;
+        document.getElementById('lbScreenDamage').classList.add('flash');
+        await sleep(revealDuration);
+        winners.push(winner);
+        solved = true;
+      } else {
+        // 오답 → 빨간 거부 효과 + 재시도 (게이지 변동 없음)
+        document.getElementById('lbScreenDamage').classList.remove('flash');
+        void document.getElementById('lbScreenDamage').offsetWidth;
+        document.getElementById('lbScreenDamage').classList.add('flash', 'reject');
+        await sleep(revealDuration);
+        // 재시도 안내 잠깐 — 다음 iteration 에서 같은 라운드 다시 렌더
+        document.getElementById('lbScreenDamage').classList.remove('reject');
+      }
+    }
   }
 
   // 3) 모든 라운드 완료 — 성공 배너 잠깐 보여주고 다음 씬

@@ -141,6 +141,34 @@
     border-color: var(--success); background: rgba(0,214,143,0.12);
     box-shadow: 0 4px 14px rgba(0,214,143,0.2);
   }
+  .lb-btn-failed {
+    border-color: var(--danger); background: rgba(255,61,113,0.15);
+    box-shadow: 0 4px 14px rgba(255,61,113,0.3);
+    opacity: 1;
+    animation: lbBtnShakeM 0.45s cubic-bezier(.36,.07,.19,.97) both;
+  }
+  .lb-btn-correct-hint {
+    border-color: var(--success); background: rgba(0,214,143,0.08);
+    opacity: 1;
+  }
+  .lb-btn-correct-hint::after {
+    content: ' ← 진짜 정답';
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--success); font-weight: 700; margin-left: 6px;
+  }
+  @keyframes lbBtnShakeM {
+    10%,90% { transform: translateX(-2px); }
+    20%,80% { transform: translateX(4px); }
+    30%,50%,70% { transform: translateX(-7px); }
+    40%,60% { transform: translateX(7px); }
+  }
+  .lb-retry-note {
+    text-align: center; padding: 12px;
+    background: rgba(255,61,113,0.15); border: 1px solid var(--danger);
+    border-radius: 10px;
+    font-weight: 700; font-size: 14px; color: var(--danger);
+    animation: lbBtnShakeM 0.5s;
+  }
   .lb-submitted-note {
     text-align: center; padding: 10px;
     font-family: 'JetBrains Mono', monospace; font-size: 13px;
@@ -1775,6 +1803,9 @@ function renderLogicBreakGame(state) {
 
   const isReveal = state.phase === 'reveal';
   const winnerOpt = state.winner_option;
+  const correctOpt = state.correct_option;
+  const wasCorrect = state.was_correct;
+  const showRetryHint = isReveal && wasCorrect === false;
 
   const descItems = (p.description?.items || []).map(it => `<li>${escapeHtml(it)}</li>`).join('');
   const timerHtml = state.duration > 0 && !isReveal
@@ -1783,24 +1814,34 @@ function renderLogicBreakGame(state) {
   const optsHtml = (p.options || []).map((opt, idx) => {
     const letter = String.fromCharCode(65 + idx);
     const isWinner = isReveal && opt === winnerOpt;
+    const isCorrectAns = isReveal && correctOpt && opt === correctOpt;
+    let cls = '';
+    if (isWinner && wasCorrect) cls = 'lb-btn-winner';
+    else if (isWinner && wasCorrect === false) cls = 'lb-btn-failed';
+    else if (!isWinner && isCorrectAns) cls = 'lb-btn-correct-hint';
     return `
-      <button class="lb-btn ${isWinner ? 'lb-btn-winner' : ''}" data-opt="${escapeHtml(opt)}" ${submitted || isReveal ? 'disabled' : ''}>
+      <button class="lb-btn ${cls}" data-opt="${escapeHtml(opt)}" ${submitted || isReveal ? 'disabled' : ''}>
         <span class="lb-btn-letter">${letter})</span>
         <span class="lb-btn-text">${escapeHtml(opt)}</span>
       </button>`;
   }).join('');
 
+  const attemptLabel = (p.attempt && p.attempt > 1)
+    ? ` · 재시도 ${p.attempt - 1}회`
+    : '';
+
   document.getElementById('body').innerHTML = `
     <div class="scene lb-scene">
       <div class="lb-quest">${escapeHtml(p.quest_title || '논리 파괴')}</div>
       ${timerHtml}
-      <div class="lb-round-pill">ROUND ${p.current_round || 1} / ${p.total_rounds || 3}</div>
+      <div class="lb-round-pill">ROUND ${p.current_round || 1} / ${p.total_rounds || 3}${attemptLabel}</div>
       <div class="lb-desc">
         <div class="lb-desc-title">${escapeHtml(p.description?.title || '[FILE]')}</div>
         <ul class="lb-desc-items">${descItems}</ul>
       </div>
       <div class="lb-question">${escapeHtml(p.question || '선택지')}</div>
       <div class="lb-opts">${optsHtml}</div>
+      ${showRetryHint ? `<div class="lb-retry-note">✗ 시스템이 거부했어요 — 다시 시도!</div>` : ''}
       ${submitted && !isReveal ? `<div class="lb-submitted-note">✓ 투표 완료 · 결과 공개 대기 중</div>` : ''}
     </div>
   `;

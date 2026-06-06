@@ -65,7 +65,8 @@ window.SCENES = {
   },
 
   // 미니게임: 두 지도(map + omap)를 정확히 겹쳐 완성
-  // 청중 폰에서 omap 을 드래그해서 map 위에 정확히 정렬하면 성공
+  // map.png: 왼쪽엔 사이언 지도, 오른쪽엔 빈 공간. omap.png 는 빨간 오버레이.
+  // omap 은 처음엔 오른쪽 빈 공간에 떠 있고, 청중이 드래그해서 왼쪽 사이언 지도 위로 옮기면 성공.
   // ★ 선착순 N명이 완성하면 게임 즉시 종료 + 완성자 명단 공개
   's05_map_game': {
     type: 'choice_only',
@@ -77,7 +78,7 @@ window.SCENES = {
         title: '🗺️ 두 지도를 합쳐라',
         description: [
           '청중 각자의 폰에 두 장의 지도가 보입니다',
-          '빨간 지도(위)를 손가락으로 드래그해서 아래 지도와 정확히 겹쳐 보세요',
+          '오른쪽에 떠 있는 빨간 지도를 손가락으로 드래그해서 왼쪽 사이언 지도 위에 정확히 겹쳐 보세요',
           '선착순 3명이 정렬에 성공하면 미션 클리어!'
         ],
         button_label: '🗺️ 지도 정렬 시작'
@@ -87,15 +88,17 @@ window.SCENES = {
       omap_src: 'omap.png',
       // 선착순 몇 명이 완성하면 성공으로 칠지
       winners_needed: 3,
-      // omap 의 정답 위치 (스테이지 폭/높이 % · 50,50 = 정중앙 = map 과 완전히 일치)
-      target_x_pct: 50,
-      target_y_pct: 50,
+      // omap 의 화면 표시 크기 (map 폭 대비 %) — 새 omap.png 는 map 폭의 ~47%
+      omap_width_pct: 45,
+      // omap 중심이 정답 위치에 오면 성공 (map 폭/높이 % 기준 · 사이언 지도 중심부)
+      target_x_pct: 24.3,
+      target_y_pct: 53.0,
       // 정답으로 인정할 허용 오차 (%)  ← 너무 어려우면 6~8 로, 너무 쉬우면 2~3 으로
-      tolerance_pct: 4,
-      // 시작 시 정답에서 얼마나 벗어나서 시작할지 (%)  ← 게임 난이도 조절
-      start_dx_pct: 22,
-      start_dy_pct: -14,
-      duration: 40000
+      tolerance_pct: 6,
+      // 시작 시 정답에서 얼마나 벗어나서 시작할지 (%) — omap 이 오른쪽 빈 공간에 뜨도록
+      start_dx_pct: 45,    // target_x + 45 = ~72% → 오른쪽 빈 공간 중앙
+      start_dy_pct: 0,
+      duration: 60000
     },
     next: { success: 's05_complete', default: 's05_complete' }
   },
@@ -204,7 +207,7 @@ window.SCENES = {
 
   's06_3_game': {
     type: 'logic_break',
-    quest_title: '🧠 퀘스트: 컴퓨터의 논리를 무너뜨려라',
+    quest_title: '퀘스트: 컴퓨터의 논리를 무너뜨려라',
     description: {
       title: '[논리 FILE]',
       items: [
@@ -216,27 +219,29 @@ window.SCENES = {
     round_duration: 15000,    // 라운드당 15초 투표
     reveal_duration: 2200,    // 결과 공개 (데미지 애니메이션) 2.2초
     pre_intro: {
-      title: '🧠 컴퓨터의 논리를 무너뜨려라',
+      title: '컴퓨터의 논리를 무너뜨려라',
       description: [
         '컴퓨터에게 말도 안 되는 선택지를 3번 입력해서 논리를 파괴해야 합니다',
-        '두 선택지 모두 말이 안 되니, 더 마음에 드는 쪽으로 자유롭게 투표!',
         '한 라운드씩 더 다수표를 받은 선택지가 컴퓨터에 입력됩니다',
         '3라운드 모두 진행하면 컴퓨터 시스템 다운!'
       ],
-      button_label: '🧠 논리 파괴 시작'
+      button_label: '논리 파괴 시작'
     },
     rounds: [
       {
         question: '우리의 선택지는?',
-        options: ['🍔 햄버거 좋아하는 이순신', '🐕 강아지 좋아하는 강형욱']
+        options: ['🍔 햄버거 좋아하는 이순신', '🐕 강아지 좋아하는 강형욱'],
+        correct: 0   // A) 햄버거 좋아하는 이순신
       },
       {
         question: '우리의 선택지는?',
-        options: ['🐜 층간소음 때문에 슬리퍼 신은 개미', '⛸️ 스케이트화를 신은 김연아']
+        options: ['🐜 층간소음 때문에 슬리퍼 신은 개미', '⛸️ 스케이트화를 신은 김연아'],
+        correct: 0   // A) 층간소음 때문에 슬리퍼 신은 개미
       },
       {
         question: '우리의 선택지는?',
-        options: ['🌈 무지개 부동산에서 집 장만', '📦 테무에서 집 장만']
+        options: ['🌈 무지개 부동산에서 집 장만', '📦 테무에서 집 장만'],
+        correct: 1   // B) 테무에서 집 장만
       }
     ],
     next: 's06_3_done'
