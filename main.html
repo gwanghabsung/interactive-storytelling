@@ -2361,6 +2361,7 @@ function buildOverlayPayload(overlay) {
     p.start_dx_pct   = overlay.start_dx_pct   ?? 22;
     p.start_dy_pct   = overlay.start_dy_pct   ?? -14;
     p.winners_needed = overlay.winners_needed ?? 3;
+    p.omap_width_pct = overlay.omap_width_pct ?? 100;
   }
   // manual 전용 — 청중에게는 안내 문구만, 진행자가 메인에서 수동 진행
   if (overlay.type === 'manual') {

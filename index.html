@@ -485,7 +485,7 @@
   }
   .map-progress.full b { color: var(--success); }
   .map-stage {
-    position: relative; width: 100%; aspect-ratio: 1260 / 832;
+    position: relative; width: 100%; aspect-ratio: 2520 / 1664;
     margin: 0 auto; background: #000;
     border-radius: 12px; border: 1px solid var(--line);
     overflow: hidden; touch-action: none; user-select: none;
@@ -498,7 +498,7 @@
   }
   .map-omap {
     position: absolute;
-    width: 100%; height: 100%;
+    /* width/height 은 인라인 style 로 동적 설정 — height: auto 로 종횡비 유지 */
     /* JS sets left/top as % · transform centers the image on that point */
     left: 50%; top: 50%;
     transform: translate(-50%, -50%);
@@ -1181,6 +1181,7 @@ function renderMapAlignGame(state) {
     tol:      p.tolerance_pct ?? 4,
     startDx:  p.start_dx_pct  ?? 22,
     startDy:  p.start_dy_pct  ?? -14,
+    omapWidthPct: p.omap_width_pct ?? 100,  // omap 의 가로 크기 (map 대비 %) — default 100 (옛 동작)
   };
 
   const timerHtml = state.duration > 0
@@ -1194,7 +1195,8 @@ function renderMapAlignGame(state) {
       <div class="map-hint" id="mapHint">👆 빨간 지도를 드래그해서 정확히 겹쳐보세요</div>
       <div class="map-stage" id="mapStage">
         <img class="map-base" id="mapBase" src="${escapeHtml(cfg.mapSrc)}" alt="map" draggable="false">
-        <img class="map-omap" id="mapOmap" src="${escapeHtml(cfg.omapSrc)}" alt="overlay" draggable="false">
+        <img class="map-omap" id="mapOmap" src="${escapeHtml(cfg.omapSrc)}" alt="overlay" draggable="false"
+             style="width: ${cfg.omapWidthPct}%; height: auto;">
         <div class="map-success" id="mapSuccess">✓ 완벽한 정렬!</div>
       </div>
     </div>
