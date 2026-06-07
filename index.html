@@ -186,6 +186,42 @@
     100% { transform: scale(1); opacity: 1; }
   }
 
+  /* ─── reaction_wait — 7-2 반응속도 게임 대기 화면 ─── */
+  .rw-scene {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px; padding: 40px 0;
+  }
+  .rw-icon {
+    font-size: 80px;
+    animation: rwPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes rwPulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.08); }
+  }
+  .rw-title {
+    font-size: 44px; font-weight: 800; letter-spacing: 0.04em;
+    color: var(--text);
+  }
+  .rw-sub {
+    font-family: 'JetBrains Mono', monospace; font-size: 14px;
+    color: var(--muted); letter-spacing: 0.06em;
+  }
+  .rw-warn {
+    margin-top: 14px;
+    padding: 10px 16px;
+    border: 1px dashed var(--danger);
+    border-radius: 999px;
+    color: var(--danger);
+    font-weight: 700; font-size: 13px;
+    animation: rwBlink 1.2s ease-in-out infinite;
+  }
+  @keyframes rwBlink {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
   /* ─── 챕터 타이틀 카드 (chapter_title) ─── */
   .ct-scene {
     flex: 1; display: flex; flex-direction: column;
@@ -307,15 +343,26 @@
   }
   .choice-btn.locked { opacity: 0.5; pointer-events: none; }
   .choice-btn.locked.selected { opacity: 1; }
-  /* 거부된 선택지 — 탭해도 클릭은 안 먹히고 빨간 흔들림만 매번 발생 */
+  /* 거부된 선택지 — 탭해도 클릭은 안 먹히고 빨간 흔들림 + 빨간 테두리 매번 발생 */
   .choice-btn.choice-shake {
     animation: choiceShake 0.5s cubic-bezier(.36,.07,.19,.97) both;
   }
   @keyframes choiceShake {
-    10%,90% { transform: translateX(-3px); }
-    20%,80% { transform: translateX(5px); }
-    30%,50%,70% { transform: translateX(-10px); }
-    40%,60% { transform: translateX(10px); }
+    0%, 100% {
+      transform: translateX(0);
+      border-color: var(--line);
+      background: var(--surface);
+      box-shadow: none;
+    }
+    10%, 90% {
+      transform: translateX(-3px);
+      border-color: var(--danger);
+      background: rgba(255,61,113,0.10);
+      box-shadow: 0 0 16px rgba(255,61,113,0.4);
+    }
+    20%, 80% { transform: translateX(5px); border-color: var(--danger); background: rgba(255,61,113,0.10); box-shadow: 0 0 16px rgba(255,61,113,0.4); }
+    30%, 50%, 70% { transform: translateX(-10px); border-color: var(--danger); background: rgba(255,61,113,0.12); box-shadow: 0 0 20px rgba(255,61,113,0.5); }
+    40%, 60% { transform: translateX(10px); border-color: var(--danger); background: rgba(255,61,113,0.12); box-shadow: 0 0 20px rgba(255,61,113,0.5); }
   }
   .ox-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; }
   .ox-btn {
@@ -725,6 +772,33 @@ onValue(ref(db, '.info/connected'), (snap) => {
   document.getElementById('connBar').classList.toggle('show', !ok);
 });
 
+// 접속자 강제 초기화 — 메인에서 system/kick_at 을 갱신하면 모두 강제 로그아웃
+let lastKickAt = undefined;
+onValue(ref(db, 'system/kick_at'), (snap) => {
+  const val = snap.val();
+  if (lastKickAt === undefined) {
+    lastKickAt = val;   // 첫 값은 기준치로만 저장, 강퇴하지 않음
+    return;
+  }
+  if (val && val !== lastKickAt) {
+    // 메인에서 새 kick 신호 → 강제 로그아웃
+    localStorage.removeItem('audience_user');
+    user = null;
+    submitted = false;
+    currentSceneId = null;
+    currentState = null;
+    currentInputs = {};
+    if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
+    if (stateUnsubscribe) { stateUnsubscribe(); stateUnsubscribe = null; }
+    stopTimer();
+    lastKickAt = val;
+    // 닉네임 입력 화면으로
+    renderJoin();
+    // 알림
+    setTimeout(() => alert('진행자가 접속을 초기화했습니다. 다시 닉네임을 입력해 주세요.'), 100);
+  }
+});
+
 // ════════════════════════════════════════════════════════════
 // 화면 렌더링
 // ════════════════════════════════════════════════════════════
@@ -1028,6 +1102,20 @@ function renderScene(state) {
   // logic_break: 6-3 머리의 방 미니게임
   if (type === 'logic_break') {
     renderLogicBreakGame(state);
+    return;
+  }
+
+  // reaction_wait: 반응속도 게임의 "대기 중" phase — 버튼 없이 준비 화면만
+  if (type === 'reaction_wait') {
+    document.getElementById('body').innerHTML = `
+      <div class="scene rw-scene">
+        <div class="rw-icon">🤫</div>
+        <div class="rw-title">준비...</div>
+        <div class="rw-sub">곧 "지금!" 버튼이 나타나요</div>
+        <div class="rw-warn">미리 누르지 마세요!</div>
+      </div>
+    `;
+    stopTimer();
     return;
   }
 
