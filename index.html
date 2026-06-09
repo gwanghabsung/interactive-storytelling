@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0a0f">
-<title>참여 · Audience Live</title>
+<title>참여 · To save__</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+KR:wght@400;500;700&display=swap" rel="stylesheet">
@@ -758,7 +758,6 @@ let submitted = false;
 let burstCount = 0;
 let serverOffset = 0;
 let timerId = null;
-let burstAutoSubmitId = null;
 let stateUnsubscribe = null;
 
 // 서버 시간 오프셋
@@ -1263,24 +1262,12 @@ function renderScene(state) {
     }
   }
 
-  startTimerLoop(state);
+  startTimerLoop();
 
-  // qte_burst 시간 종료 시 자동 제출
+  // qte_burst 카운터 초기화 — 자동 제출은 startTimerLoop 안에서 처리
+  //   (별도 setTimeout 안 씀 → 메인의 -5s 단축에도 즉시 따라감)
   if (type === 'qte_burst') {
-    const remaining = state.started_at + state.duration - serverNow();
     burstCount = 0;
-    if (burstAutoSubmitId) clearTimeout(burstAutoSubmitId);
-    burstAutoSubmitId = setTimeout(() => {
-      // 예약된 throttled write 가 final submit 뒤에 도착해서 덮어쓰지 않도록 취소
-      if (burstWriteTimer) { clearTimeout(burstWriteTimer); burstWriteTimer = null; }
-      burstWritePending = false;
-      if (!submitted && burstCount > 0) {
-        submitInput({ count: burstCount }, `${burstCount} taps`);
-      } else if (!submitted) {
-        submitted = true;
-        renderSubmitted('참여 안 함');
-      }
-    }, Math.max(0, remaining));
   }
 }
 
@@ -1319,7 +1306,7 @@ function renderMapAlignGame(state) {
   `;
 
   initMapAlignDrag(cfg);
-  startTimerLoop(state);
+  startTimerLoop();
   updateMapAlignProgress();  // 진입 시점에도 한 번 그려주기 (이미 누군가 완료했을 수도)
 }
 
@@ -1642,7 +1629,7 @@ function renderMatch3Game(state) {
 
   paint();
   refreshChecklist();
-  startTimerLoop(state);
+  startTimerLoop();
   updateMatch3Progress();   // 입장 시점 카운터 한 번 그리기
 
   // ── 제스처 핸들러 (탭 + 스와이프) ─────────────────────────
@@ -1963,7 +1950,7 @@ function renderLogicBreakGame(state) {
     });
   }
 
-  if (state.duration > 0 && !isReveal) startTimerLoop(state);
+  if (state.duration > 0 && !isReveal) startTimerLoop();
   else stopTimer();
 }
 
@@ -2084,18 +2071,28 @@ function tickBurst() {
 
 // ════════════════════════════════════════════════════════════
 // 타이머
+// ────────────────────────────────────────────────────────────
+//   ⚠ 핵심: state 객체를 클로저에 캡쳐하지 않고 매 tick 마다 `currentState`
+//   (Firebase 최신값) 를 읽음. 메인에서 −5s 등으로 duration 이 바뀌면
+//   다음 RAF tick 에서 자동으로 반영됨 — 별도 재시작 불필요.
+//
+//   메인이 started_at 을 서버시각으로 쓰고, 여기서도 serverNow() 로 비교하므로
+//   메인과 청중의 타이머 종료 시점은 항상 동일.
 // ════════════════════════════════════════════════════════════
-function startTimerLoop(state) {
+function startTimerLoop() {
   stopTimer();
-  if (state.duration === 0) return;
+  if (!currentState || !currentState.duration) return;
   const update = () => {
-    const remaining = Math.max(0, state.started_at + state.duration - serverNow());
+    if (!currentState) { stopTimer(); return; }
+    const s = currentState;
+    const remaining = Math.max(0, s.started_at + s.duration - serverNow());
     const el = document.getElementById('timer');
-    if (!el) return;
-    el.querySelector('b').textContent = (remaining/1000).toFixed(1);
-    if (remaining < 3000) el.classList.add('warning'); else el.classList.remove('warning');
+    if (el) {
+      el.querySelector('b').textContent = (remaining/1000).toFixed(1);
+      if (remaining < 3000) el.classList.add('warning'); else el.classList.remove('warning');
+    }
     if (remaining <= 0) {
-      if (state.type === 'choice' || state.type === 'ox') {
+      if (s.type === 'choice' || s.type === 'ox') {
         // 선택지/OX: 마지막 선택 확정 잠금
         document.querySelectorAll('.choice-btn, .ox-btn').forEach(b => b.classList.add('locked'));
         const hint = document.getElementById('selectionHint');
@@ -2105,7 +2102,19 @@ function startTimerLoop(state) {
           hint.classList.remove('has-selection');
           hint.classList.add('locked');
         }
-      } else if (!submitted && state.type !== 'qte_burst') {
+      } else if (s.type === 'qte_burst') {
+        // 시간 종료 → 자동 제출 (별도 setTimeout 불필요 — −5s 단축에도 안전)
+        if (!submitted) {
+          if (burstWriteTimer) { clearTimeout(burstWriteTimer); burstWriteTimer = null; }
+          burstWritePending = false;
+          if (burstCount > 0) {
+            submitInput({ count: burstCount }, `${burstCount} taps`);
+          } else {
+            submitted = true;
+            renderSubmitted('참여 안 함');
+          }
+        }
+      } else if (!submitted) {
         document.querySelectorAll('button, input').forEach(b => b.disabled = true);
       }
       return;
@@ -2136,7 +2145,6 @@ function subscribeToState() {
       submitted = false;
       burstCount = 0;
       currentInputs = {};
-      if (burstAutoSubmitId) { clearTimeout(burstAutoSubmitId); burstAutoSubmitId = null; }
       if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
 
       // 새 씬에 대한 inputs 구독 시작 — 결과 공개 시 실시간 갱신용

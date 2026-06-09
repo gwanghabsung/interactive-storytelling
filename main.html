@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>Interactive Audience Game</title>
+<title>To save __</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+KR:wght@400;500;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
@@ -220,7 +220,7 @@
     margin-bottom: 16px;
   }
   .start-title {
-    font-size: clamp(48px, 8vw, 112px);
+    font-size: clamp(48px, 8vw, 140px);
     font-weight: 800;
     letter-spacing: -0.03em;
     line-height: 0.95;
@@ -723,8 +723,8 @@
   </div>
 
   <div class="start-screen" id="startScreen">
-    <div class="start-eyebrow">◉ Audience Live · 인터랙티브 게임</div>
-    <h1 class="start-title">시작하기</h1>
+    <div class="start-eyebrow">◉ Interactive Storytelling final</div>
+    <h1 class="start-title">To save __</h1>
     <div class="start-info">
       청중 <b id="userCount">0</b>명 접속 중 · <span id="connText">연결 중...</span>
     </div>
@@ -736,10 +736,7 @@
         <button class="small-btn" id="loadBgmsBtn">🎵 BGM 폴더</button>
       </div>
       <div id="videoStatus" style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); opacity:0.7">
-        영상 폴더를 먼저 선택해주세요
-      </div>
-      <div id="bgmStatus" style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); opacity:0.7">
-        BGM 폴더 (선택 사항)
+        폴더를 먼저 선택해주세요
       </div>
       <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
       <input type="file" id="bgmFolderInput" webkitdirectory directory multiple style="display:none">
@@ -794,6 +791,17 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const stateRef = ref(db, 'gameState');
 const usersRef = ref(db, 'users');
+
+// ════════════════════════════════════════════════════════════
+// 서버 시각 동기화 — 진행자 노트북 시계와 청중 폰 시계 차이로 인한
+//   타이머 불일치를 막기 위해 main 도 서버 시각 기준으로 started_at 을 씀.
+//   (index.html 도 동일하게 .info/serverTimeOffset 사용 → 양쪽 같은 기준점)
+// ════════════════════════════════════════════════════════════
+let mainServerOffset = 0;
+onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
+  mainServerOffset = snap.val() || 0;
+});
+function serverNow() { return Date.now() + mainServerOffset; }
 
 // 씬 정의 (scenes.js 에서 로드)
 const SCENES = window.SCENES;
@@ -1059,12 +1067,16 @@ let currentOverlayState = null;
 // 예: choicesHistory['s06_1_decision'] = '구하러 간다'
 let choicesHistory = {};
 
-function showOverlay(scene_id, overlayDef) {
-  currentOverlayState = { scene_id, overlay: overlayDef, started_at: Date.now() };
+function showOverlay(scene_id, overlayDef, startedAt) {
+  // startedAt 은 Firebase 에 쓴 그 값(서버 시각)을 그대로 받아서
+  //   메인 로컬 타이머도 청중 폰과 정확히 동일 시점에 종료되게 정렬.
+  //   넘기지 않으면 안전하게 현재 서버 시각으로 폴백.
+  if (!startedAt) startedAt = serverNow();
+  currentOverlayState = { scene_id, overlay: overlayDef, started_at: startedAt };
   prevQteTotal = 0;  // 새 씬 시작 시 펄스 추적값 초기화
   renderOverlay(overlayDef.options || [], {}, overlayDef);
   overlay.classList.add('show');
-  startOverlayTimer(overlayDef.duration || 10000);
+  startOverlayTimer(overlayDef.duration || 10000, startedAt);
 }
 
 function hideOverlay() {
@@ -1450,14 +1462,33 @@ let qteBurstFinalStats = null;
 let mapAlignWinners = null;   // 5장 지도 게임 1/2/3등 [{nickname, took_ms}]
 let match3Winners = null;     // 8-2 매치3 게임 1/2/3등 [{nickname, took_ms}]
 
+// 게임 MVP 누적 점수 — 각 게임의 1/2/3등에게 +3/+2/+1
+// { 'nickname': totalPoints, ... }
+const gameScores = {};
+
+// 1/2/3등 닉네임 배열을 받아서 3/2/1 점 누적
+function awardGamePoints(rankedNicknames, label) {
+  const points = [3, 2, 1];
+  rankedNicknames.slice(0, 3).forEach((nick, idx) => {
+    if (!nick) return;
+    gameScores[nick] = (gameScores[nick] || 0) + points[idx];
+  });
+  console.log('  🏆 [' + (label || 'game') + '] points awarded:',
+    rankedNicknames.slice(0, 3).map((n, i) => `${n} +${points[i]}`).join(', '));
+}
+
 // result_mode === 'success_fail' 일 때 outcome 산출
-//   - qte_burst: 누적 탭 수 >= success_threshold
+//   - qte_burst:        누적 탭 수 >= success_threshold
+//   - map_align/match3: 성공 완료한 사람 수 >= success_threshold (또는 winners_needed)
 //   - choice/qte/ox/text: 응답한 사람 수 >= success_threshold (기본 1)
 function computeSuccessFail(overlayDef, tally, rawInputs) {
-  const threshold = overlayDef.success_threshold ?? 1;
+  const threshold = overlayDef.success_threshold ?? overlayDef.winners_needed ?? 1;
   let metric;
   if (overlayDef.type === 'qte_burst') {
     metric = Object.values(tally).reduce((a, b) => a + (b || 0), 0);
+  } else if (overlayDef.type === 'map_align' || overlayDef.type === 'match3') {
+    const successKey = overlayDef.type === 'match3' ? 'eliminated' : 'aligned';
+    metric = Object.values(rawInputs || {}).filter(i => i?.input?.[successKey]).length;
   } else {
     metric = Object.keys(rawInputs || {}).length;
   }
@@ -1492,13 +1523,15 @@ let overlayTimerStartedAt = 0;
 let overlayTimerDurationMs = 0;
 let overlayTimerResolvers = [];
 
-function startOverlayTimer(durationMs) {
+function startOverlayTimer(durationMs, startedAt) {
   stopOverlayTimer();
-  overlayTimerStartedAt = Date.now();
+  // 청중 폰의 remaining = state.started_at + state.duration - serverNow()
+  //   메인도 동일 공식을 쓰도록 startedAt(=Firebase started_at, 서버시각) 기준.
+  overlayTimerStartedAt = startedAt || serverNow();
   overlayTimerDurationMs = durationMs;
   const tick = () => {
     if (!currentOverlayState) return;
-    const remaining = Math.max(0, overlayTimerDurationMs - (Date.now() - overlayTimerStartedAt));
+    const remaining = Math.max(0, overlayTimerStartedAt + overlayTimerDurationMs - serverNow());
     const el = document.getElementById('overlayTimer');
     if (el) {
       el.textContent = (remaining/1000).toFixed(1) + 's';
@@ -1508,10 +1541,12 @@ function startOverlayTimer(durationMs) {
     if (remaining > 0) {
       overlayTimerId = requestAnimationFrame(tick);
     } else {
-      // 0 도달 → waitForOverlayTimer() 대기자들 깨우기
+      // 0 도달 → pendingShaveSync (마지막 shave 의 Firebase write) 끝난 뒤 깨우기
+      //   강제종료(투표) 처럼 한 번에 0 이 되는 경우, 청중이 shave 결과(=0초) 를 보기 전에
+      //   reveal phase 로 넘어가면 -5s 가 안 먹은 것처럼 보이므로 sync 까지 대기.
       const resolvers = overlayTimerResolvers;
       overlayTimerResolvers = [];
-      resolvers.forEach(r => r());
+      pendingShaveSync.finally(() => resolvers.forEach(r => r()));
     }
   };
   overlayTimerId = requestAnimationFrame(tick);
@@ -1519,15 +1554,28 @@ function startOverlayTimer(durationMs) {
 
 // 오버레이 타이머가 0 이 될 때까지 대기 (sleep 대체용)
 function waitForOverlayTimer() {
-  const remaining = overlayTimerDurationMs - (Date.now() - overlayTimerStartedAt);
+  const remaining = overlayTimerStartedAt + overlayTimerDurationMs - serverNow();
   if (remaining <= 0) return Promise.resolve();
   return new Promise(resolve => overlayTimerResolvers.push(resolve));
 }
 
 // 외부 호출용: 남은 시간 ms 만큼 깎기 (음수가 되면 다음 tick 에서 종료)
+//   메인 로컬 타이머 + Firebase state 둘 다 깎아서 청중 폰에도 즉시 반영.
+//   pendingShaveSync 를 통해 강제종료(투표 버튼) 같이 즉시 0 으로 만드는 경우에도
+//   Firebase 동기화가 끝난 뒤 reveal 단계로 넘어가게 보장 → 청중이 단축 결과 못 보고 넘어가는 일 방지.
+let pendingShaveSync = Promise.resolve();
 function shaveOverlayTimer(ms) {
   if (!overlayTimerStartedAt) return;
+  // 현재 남은 시간보다 더 깎으면 안 되므로 clamp.
+  //   (overlayTimerDurationMs 는 started_at 기준 "총 길이" 이므로,
+  //   "지금 시점부터 남은 ms" 를 깎는 의미가 되도록 동일하게 -ms 적용)
   overlayTimerDurationMs = Math.max(0, overlayTimerDurationMs - ms);
+  // Firebase 의 duration = started_at 기준 새 총 길이.
+  //   양쪽 모두 started_at + duration 시점에 종료되도록 동기화.
+  const writeP = update(stateRef, { duration: overlayTimerDurationMs, updated_at: Date.now() })
+    .catch(err => console.warn('shave duration sync failed', err));
+  // 직전 sync 와 직렬화 (연달아 −5s 눌렀을 때 마지막 write 가 최종 상태로 가게)
+  pendingShaveSync = pendingShaveSync.then(() => writeP);
 }
 function stopOverlayTimer() {
   if (overlayTimerId) { cancelAnimationFrame(overlayTimerId); overlayTimerId = null; }
@@ -1980,10 +2028,11 @@ async function runLogicBreakScene(sceneId, scene) {
       `;
 
       // Firebase 에 라운드 상태 쓰기
+      const roundStartedAt = serverNow();
       await set(stateRef, {
         scene_id: roundSceneId,
         type: 'logic_break',
-        started_at: Date.now(),
+        started_at: roundStartedAt,
         duration: roundDuration,
         payload: {
           quest_title: scene.quest_title,
@@ -2008,8 +2057,8 @@ async function runLogicBreakScene(sceneId, scene) {
       });
 
       // ★ currentOverlayState 를 non-null 로 설정 — 안 그러면 startOverlayTimer 의 tick 이 즉시 반환됨
-      currentOverlayState = { scene_id: roundSceneId, overlay: { type: 'logic_break' }, started_at: Date.now() };
-      startOverlayTimer(roundDuration);
+      currentOverlayState = { scene_id: roundSceneId, overlay: { type: 'logic_break' }, started_at: roundStartedAt };
+      startOverlayTimer(roundDuration, roundStartedAt);
       runLogicBreakTimerLoop();
       await waitForOverlayTimer();
       stopLogicBreakTimerLoop();
@@ -2082,7 +2131,7 @@ async function runLogicBreakScene(sceneId, scene) {
   if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
   const roundArea = document.getElementById('lbRoundArea');
   if (roundArea) {
-    roundArea.innerHTML = `<div class="lb-success">💥 시스템 다운! 컴퓨터 논리 파괴 성공</div>`;
+    roundArea.innerHTML = `<div class="lb-success">💥 시스템 다운! 논리 파괴 성공</div>`;
   }
   // 게이지는 0% 까지 떨어진 상태
   await set(stateRef, {
@@ -2126,7 +2175,7 @@ function runLogicBreakTimerLoop() {
   const tick = () => {
     const el = document.getElementById('lbTimer');
     if (!el) return;
-    const remaining = Math.max(0, overlayTimerDurationMs - (Date.now() - overlayTimerStartedAt));
+    const remaining = Math.max(0, overlayTimerStartedAt + overlayTimerDurationMs - serverNow());
     el.textContent = `⏱ ${(remaining/1000).toFixed(1)}s`;
     el.classList.toggle('warning', remaining < 4000);
     if (remaining > 0) lbTimerRaf = requestAnimationFrame(tick);
@@ -2237,7 +2286,7 @@ async function runChoiceOnlyScene(sceneId, scene) {
   const fbScene = {
     scene_id: `${sceneId}_${Date.now()}`,
     type: scene.overlay.type || 'choice',
-    started_at: Date.now(),
+    started_at: serverNow(),
     duration: scene.overlay.duration || 10000,
     payload: buildOverlayPayload(scene.overlay),
     phase: 'collecting',
@@ -2245,28 +2294,61 @@ async function runChoiceOnlyScene(sceneId, scene) {
   };
   await set(stateRef, fbScene);
   subscribeToInputs(fbScene.scene_id, scene.overlay);
-  showOverlay(fbScene.scene_id, scene.overlay);
+  showOverlay(fbScene.scene_id, scene.overlay, fbScene.started_at);
 
   await waitForOverlayTimer();
 
-  const winner = pickWinner(scene.overlay.type, currentInputs, scene.overlay, scene.next);
-  console.log('  Winner:', winner);
-  choicesHistory[sceneId] = winner;
+  // ──────────────────────────────────────────────
+  // 결과 계산 — result_mode 가 'success_fail' 이면 성공/실패 판정 (map_align/match3 포함),
+  //   아니면 기존 winner 로직. runVideoScene 의 overlay 처리부와 동일 패턴.
+  // ──────────────────────────────────────────────
+  const finalTally = aggregateInputs(scene.overlay.type, currentInputs);
+  let outcome;
+  if (scene.overlay.result_mode === 'success_fail') {
+    outcome = computeSuccessFail(scene.overlay, finalTally, currentInputs);
+  } else {
+    outcome = pickWinner(scene.overlay.type, currentInputs, scene.overlay, scene.next);
+  }
+  console.log('  Outcome:', outcome);
+  choicesHistory[sceneId] = outcome;
 
+  // map_align / match3 1/2/3등 보관 (took_ms 빠른 순) — 크레딧 씬용
+  if (scene.overlay.type === 'map_align' || scene.overlay.type === 'match3') {
+    const successKey = scene.overlay.type === 'match3' ? 'eliminated' : 'aligned';
+    const ranked = Object.values(currentInputs)
+      .filter(i => i?.input?.[successKey])
+      .sort((a, b) => {
+        const at = a.input?.took_ms ?? a.timestamp ?? 0;
+        const bt = b.input?.took_ms ?? b.timestamp ?? 0;
+        return at - bt;
+      })
+      .slice(0, 3)
+      .map(w => ({ nickname: w.nickname || '익명', took_ms: w.input?.took_ms ?? null }));
+    if (scene.overlay.type === 'map_align') mapAlignWinners = ranked;
+    else match3Winners = ranked;
+    // MVP 점수
+    awardGamePoints(ranked.map(w => w.nickname), scene.overlay.type);
+  }
+
+  // reveal 단계
   await update(stateRef, { phase: 'reveal', updated_at: Date.now() });
-  renderOverlay(
-    scene.overlay.options || ['O','X'],
-    aggregateInputs(scene.overlay.type, currentInputs),
-    scene.overlay,
-    true
-  );
+  if (scene.overlay.result_mode === 'success_fail') {
+    renderSuccessFail(outcome, scene.overlay, finalTally);
+  } else {
+    renderOverlay(
+      scene.overlay.options || ['O','X'],
+      finalTally,
+      scene.overlay,
+      true
+    );
+  }
   await sleep(3000);
 
   hideOverlay();
   if (inputsUnsubscribe) { inputsUnsubscribe(); inputsUnsubscribe = null; }
   await set(stateRef, { scene_id: '', type: 'idle', phase: 'idle', updated_at: Date.now() });
 
-  const nextId = scene.next[winner] || scene.next.default;
+  const nextId = scene.next[outcome] || scene.next.default;
   if (nextId) return playScene(nextId);
 }
 
@@ -2302,10 +2384,11 @@ async function runVideoScene(sceneId, scene) {
 
     // Firebase 에 챕터 카드 상태 쓰기 → 청중 폰 동기화
     const ccSceneId = `${sceneId}_chapter_${Date.now()}`;
+    const ccStartedAt = serverNow();
     await set(stateRef, {
       scene_id: ccSceneId,
       type: 'chapter_title',
-      started_at: Date.now(),
+      started_at: ccStartedAt,
       duration: 999999,
       payload: { chapter_label: cc.chapter_label || '', title: cc.title || '' },
       phase: 'intro',
@@ -2313,8 +2396,8 @@ async function runVideoScene(sceneId, scene) {
     });
 
     // 메인 화면에 챕터 카드 오버레이 표시 + 진행자 버튼 대기
-    currentOverlayState = { scene_id: ccSceneId, overlay: { type: 'chapter_title' }, started_at: Date.now() };
-    startOverlayTimer(999999);    // waitForOverlayTimer() 가 stopOverlayTimer() 호출 시 깨어나도록
+    currentOverlayState = { scene_id: ccSceneId, overlay: { type: 'chapter_title' }, started_at: ccStartedAt };
+    startOverlayTimer(999999, ccStartedAt);    // waitForOverlayTimer() 가 stopOverlayTimer() 호출 시 깨어나도록
     renderOverlay(null, null, {
       type: 'chapter_title',
       chapter_label: cc.chapter_label,
@@ -2362,7 +2445,7 @@ async function runVideoScene(sceneId, scene) {
         scene_id: waitSceneId,
         type: 'reaction_wait',
         phase: 'pre_delay',
-        started_at: Date.now(),
+        started_at: serverNow(),
         duration: 0,
         payload: { prompt: scene.overlay.prompt || '준비하세요...' },
         updated_at: Date.now()
@@ -2382,7 +2465,7 @@ async function runVideoScene(sceneId, scene) {
       // overlay 가 아직 안 떠있으면 띄움 (pre_intro 후엔 보통 떠있음)
       overlay.classList.add('show');
       // currentOverlayState — 타이머/대기 안전용
-      currentOverlayState = { scene_id: waitSceneId, overlay: { type: 'reaction_wait' }, started_at: Date.now() };
+      currentOverlayState = { scene_id: waitSceneId, overlay: { type: 'reaction_wait' }, started_at: serverNow() };
 
       await sleep(delay);
     }
@@ -2391,7 +2474,7 @@ async function runVideoScene(sceneId, scene) {
     const fbScene = {
       scene_id: `${sceneId}_${Date.now()}`,
       type: scene.overlay.type,
-      started_at: Date.now(),
+      started_at: serverNow(),
       duration: scene.overlay.duration || 10000,
       payload: buildOverlayPayload(scene.overlay),
       phase: 'collecting',
@@ -2401,10 +2484,18 @@ async function runVideoScene(sceneId, scene) {
 
     // 5) inputs 구독 시작 + 오버레이 표시
     subscribeToInputs(fbScene.scene_id, scene.overlay);
-    showOverlay(fbScene.scene_id, scene.overlay);
+    showOverlay(fbScene.scene_id, scene.overlay, fbScene.started_at);
 
     // 6) 투표 시간 동안 대기 (진행자가 ⏹ 버튼이나 −Ns 로 단축 가능)
     await waitForOverlayTimer();
+
+    // 6-a) 반응속도 게임: duration 이 0 이 된 직후에도 청중의 늦은 탭 입력이
+    //   Firebase 로 도착할 수 있도록 짧은 버퍼 시간 부여 (~Firebase RTT 보정).
+    //   audience 쪽 그레이스 (400ms) 와 합쳐 ~500ms 동안 늦은 탭 수용.
+    //   메인 화면 자체는 이미 "지금!" 으로 뜬 상태이므로 진행자 보기엔 자연스러움.
+    if (scene.overlay.pre_delay_min_ms) {
+      await sleep(500);
+    }
 
     // 6-b) manual / chapter_title — 청중 투표가 아니라 진행자 버튼 클릭, reveal 없이 바로 진행
     if (scene.overlay.type === 'manual' || scene.overlay.type === 'chapter_title') {
@@ -2438,6 +2529,21 @@ async function runVideoScene(sceneId, scene) {
     // 7-b) qte_burst 의 최종 통계를 크레딧 씬에서 쓰도록 보관
     if (scene.overlay.type === 'qte_burst') {
       qteBurstFinalStats = finalTally;
+      // MVP 점수 — 누적 탭 카운트 Top 3
+      const topTappers = Object.entries(finalTally)
+        .filter(([, c]) => c > 0)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([nick]) => nick);
+      awardGamePoints(topTappers, 'qte_burst');
+    }
+    // 7-b2) 반응속도 게임 [pre_delay_min_ms 있으면] — timestamp 빠른 순 Top 3
+    if (scene.overlay.pre_delay_min_ms && outcome === 'success') {
+      const fastest = Object.values(currentInputs)
+        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+        .slice(0, 3)
+        .map(w => w.nickname || '익명');
+      awardGamePoints(fastest, 'reaction');
     }
     // 7-c) map_align / match3 의 1/2/3등 보관 (took_ms 빠른 순)
     if (scene.overlay.type === 'map_align' || scene.overlay.type === 'match3') {
@@ -2453,6 +2559,8 @@ async function runVideoScene(sceneId, scene) {
         .map(w => ({ nickname: w.nickname || '익명', took_ms: w.input?.took_ms ?? null }));
       if (scene.overlay.type === 'map_align') mapAlignWinners = ranked;
       else match3Winners = ranked;
+      // MVP 점수
+      awardGamePoints(ranked.map(w => w.nickname), scene.overlay.type);
     }
 
     // 8) reveal 단계
@@ -2542,13 +2650,31 @@ async function runCreditsScene(scene) {
   screen.innerHTML = `<div class="credits-roll" id="creditsRoll">${buildCreditsHtml(scene)}</div>`;
   const roll = document.getElementById('creditsRoll');
   const durationMs = scene.duration || 70000;
-  roll.style.animationDuration = `${durationMs}ms`;
   screen.classList.add('show');
 
+  // 컨텐츠 높이가 화면 높이보다 클 수 있으므로, CSS keyframe 대신 JS 로 동적 스크롤.
+  // 시작: 컨텐츠 윗부분이 화면 바닥에 위치 (translateY = +viewport)
+  // 끝:   컨텐츠 아랫부분이 화면 천장을 넘어감 (translateY = -contentHeight)
+  // 이렇게 해야 메시지 같은 긴 컨텐츠 끝까지 다 보임.
+  // requestAnimationFrame 두 번 기다려서 레이아웃 완료 후 transition 트리거.
+  roll.style.animation = 'none';                  // 기존 CSS 애니메이션 비활성
+  roll.style.top = '0';
+  roll.style.transition = 'none';
+  roll.style.transform = `translate(-50%, ${window.innerHeight}px)`;
+
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const contentH = roll.offsetHeight;
+
+  roll.style.transition = `transform ${durationMs}ms linear`;
+  roll.style.transform = `translate(-50%, ${-contentH}px)`;
+
   // 스크롤 완료 시 다시 시작 버튼 노출
-  roll.addEventListener('animationend', () => {
+  const onEnd = (ev) => {
+    if (ev && ev.propertyName !== 'transform') return;
+    roll.removeEventListener('transitionend', onEnd);
     restartBtn.classList.add('show');
-  }, { once: true });
+  };
+  roll.addEventListener('transitionend', onEnd);
 
   await set(stateRef, { scene_id: '', type: 'credits', phase: 'idle', updated_at: Date.now() });
 }
@@ -2570,12 +2696,12 @@ function buildCreditsHtml(scene) {
     .map(u => (u && (u.nickname || u.name)) || '')
     .filter(Boolean);
 
-  // 7-3 탭 통계 (있으면)
+  // 7-3 탭 통계 (있으면) — Top 3 로 통일
   let topTappers = [];
   let tapTotal = 0;
   if (qteBurstFinalStats) {
     const entries = Object.entries(qteBurstFinalStats).filter(([, c]) => c > 0);
-    topTappers = entries.sort((a, b) => b[1] - a[1]).slice(0, 5);
+    topTappers = entries.sort((a, b) => b[1] - a[1]).slice(0, 3);
     tapTotal = entries.reduce((sum, [, c]) => sum + (c || 0), 0);
   }
 
@@ -2583,21 +2709,23 @@ function buildCreditsHtml(scene) {
     ? nicknames.map(n => `<div class="row">${escapeHtml(n)}</div>`).join('')
     : `<div class="row" style="color:var(--muted)">참가자 정보 없음</div>`;
 
+  const rankEmoji = ['1', '2', '3'];
+
   const tapStatsHtml = topTappers.length ? `
     <section>
-      <h3>Tapping MVP</h3>
-      ${topTappers.map(([name, count]) => `
-        <div class="row">${escapeHtml(name)}<span class="cnt">${count}</span></div>
+      <h3>⚡ Tapping — Top 3</h3>
+      ${topTappers.map(([name, count], idx) => `
+        <div class="row">
+          <span class="mission-rank">${rankEmoji[idx] || (idx+1)}</span>
+          ${escapeHtml(name)}
+          <span class="cnt">${count}</span>
+        </div>
       `).join('')}
-    </section>
-    <section>
-      <h3>Total Clicks</h3>
-      <div class="big-stat">${tapTotal.toLocaleString()}</div>
+      <div class="big-stat" style="margin-top:24px">${tapTotal.toLocaleString()}<span style="font-size:.4em;color:var(--muted);margin-left:8px">Total Clicks</span></div>
     </section>
   ` : '';
 
   // 미션별 1/2/3등 (지도 정렬, 매치3) — took_ms 빠른 순
-  const rankEmoji = ['1', '2', '3'];
   const renderMissionTop3 = (winners, missionLabel, emptyMsg) => {
     if (!winners || !winners.length) return '';
     const rows = winners.slice(0, 3).map((w, idx) => {
@@ -2617,6 +2745,24 @@ function buildCreditsHtml(scene) {
   const missionWinnersHtml =
     renderMissionTop3(mapAlignWinners, '🗺️ 지도 정렬 — Top 3') +
     renderMissionTop3(match3Winners, '🔍 숨은 폭력 찾기 — Top 3');
+
+  // 🏆 게임 MVP — 모든 게임 1/2/3등 점수 합산 Top 3 (각 게임 +3/+2/+1)
+  const mvpRanked = Object.entries(gameScores)
+    .filter(([, p]) => p > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+  const mvpHtml = mvpRanked.length ? `
+    <section>
+      <h3>🏆 Game MVP</h3>
+      ${mvpRanked.map(([nick, pts], idx) => `
+        <div class="row">
+          <span class="mission-rank">${rankEmoji[idx] || (idx+1)}</span>
+          ${escapeHtml(nick)}
+          <span class="cnt">${pts}점</span>
+        </div>
+      `).join('')}
+    </section>
+  ` : '';
 
   const producers = scene.producers || [];
   const producersHtml = producers.map(p => `<div class="row">${escapeHtml(p)}</div>`).join('');
@@ -2649,6 +2795,8 @@ function buildCreditsHtml(scene) {
     ${missionWinnersHtml}
 
     ${tapStatsHtml}
+
+    ${mvpHtml}
 
     <section>
       <h3>Produced By</h3>
@@ -2792,6 +2940,14 @@ onValue(usersRef, (snap) => {
   const count = Object.keys(currentUsers).length;
   document.getElementById('userCount').textContent = count;
   document.getElementById('hudUsers').textContent = count;
+  // 청중 0명이면 시작 버튼 비활성화
+  const startBtn = document.getElementById('startBtn');
+  if (startBtn) {
+    startBtn.disabled = (count === 0);
+    startBtn.style.opacity = (count === 0) ? '0.4' : '';
+    startBtn.style.cursor = (count === 0) ? 'not-allowed' : '';
+    startBtn.title = (count === 0) ? '청중이 1명 이상 접속해야 시작할 수 있어요' : '';
+  }
 });
 
 onValue(ref(db, '.info/connected'), (snap) => {
@@ -2805,6 +2961,12 @@ onValue(ref(db, '.info/connected'), (snap) => {
 // 게임 컨트롤
 // ════════════════════════════════════════════════════════════
 async function startGame() {
+  // 청중이 1명도 없으면 시작 차단
+  const userCount = Object.keys(currentUsers).length;
+  if (userCount === 0) {
+    alert('청중이 1명 이상 접속해야 게임을 시작할 수 있어요.');
+    return;
+  }
   document.getElementById('startScreen').classList.add('hide');
   document.getElementById('devControls').classList.add('active');
   // 청중 입력 초기화
@@ -2823,6 +2985,8 @@ window.restartGame = async function() {
   qteBurstFinalStats = null;
   mapAlignWinners = null;
   match3Winners = null;
+  // gameScores 는 const 라서 재할당 불가 — 키만 비우기
+  for (const k of Object.keys(gameScores)) delete gameScores[k];
   vA.pause(); vB.pause();
   vA.src = ''; vB.src = '';
   vA.classList.remove('active');
